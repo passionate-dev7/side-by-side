@@ -30,10 +30,6 @@ export function day(iso: string): string {
   return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(d);
 }
 
-export function duration(minutes: number | null): string | null {
-  if (minutes === null) return null;
-  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
-}
 
 export function stops(n: number): string {
   return n === 0 ? "Nonstop" : n === 1 ? "1 stop" : `${n} stops`;

@@ -16,7 +16,7 @@
   --r-1: 4px; --r-2: 8px; --r-3: 12px; --r-4: 16px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-micro: 120ms; --dur-short: 220ms;
-  --seat-h: 44px;
+  --seat-h: 42px;
 }
 [data-theme="dark"] {
   --card: #14181E;
@@ -104,6 +104,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .cabin { display: flex; flex-direction: column; justify-content: center; gap: var(--sp-2); min-width: 0; transition: opacity var(--dur-short) var(--ease-out); }
 .cabin[aria-busy="true"] { opacity: 0.6; }
 .row { display: grid; grid-template-columns: 28px var(--cols); gap: var(--sp-2); align-items: stretch; height: var(--seat-h); }
+.skip { display: flex; align-items: center; gap: var(--sp-4); height: 14px; color: var(--muted); font-size: 14px; }
+.skip::before, .skip::after { content: ""; flex: 1; border-top: 2px dotted var(--rule); }
 .rownum { align-self: center; font-size: var(--fs-note); color: var(--muted); text-align: right; padding-right: var(--sp-2); }
 .aisle, .blank { display: block; }
 .seat { position: relative; display: flex; align-items: center; justify-content: center; flex-direction: column; border-radius: var(--r-3);

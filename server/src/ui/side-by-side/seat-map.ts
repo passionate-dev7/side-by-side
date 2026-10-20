@@ -53,7 +53,11 @@ export class SeatMapScreen {
     this.cabinEl = h(
       "section",
       { class: "cabin", "aria-label": "Seat map", "aria-busy": this.busy ? "true" : null },
-      ...v.rows.map((r) => this.row(r.row, r.cells, flagged)),
+      ...v.rows.flatMap((r, i) => {
+        const prev = v.rows[i - 1];
+        const skipped = prev && r.row - prev.row > 1 ? [this.skip(prev.row + 1, r.row - 1)] : [];
+        return [...skipped, this.row(r.row, r.cells, flagged)];
+      }),
     );
     if (this.selected) this.cabinEl.setAttribute("data-armed", "");
     const body = v.rows.length
@@ -64,6 +68,12 @@ export class SeatMapScreen {
       body,
       this.foot(),
     );
+  }
+
+  /** Rows between two shown windows are not displayed: say so, so the gap is never read as adjacency. */
+  private skip(from: number, to: number): HTMLElement {
+    const label = from === to ? `row ${from}` : `rows ${from} to ${to}`;
+    return h("div", { class: "skip", role: "separator", "aria-label": `${label} not shown` }, h("span", {}, label));
   }
 
   private row(rowNo: number, cells: Cell[], flagged: Set<string>): HTMLElement {
@@ -117,7 +127,7 @@ export class SeatMapScreen {
         { class: "verdict", role: "status" },
         v.together === "TOGETHER" ? chip("ok", "Sitting together", true) : chip("warn", "Not together", true),
         ...(reasons.length ? reasons.slice(0, 2).map((r) => h("p", { class: "reason" }, r)) : v.together === "TOGETHER" ? [h("p", { class: "reason" }, "Every child has an adult beside them.")] : []),
-        v.guarantee ? chip("accent", "$0 seat fee") : null,
+        v.guarantee && v.seatFees === 0 ? chip("accent", "$0 seat fee") : null,
       ),
       sel ? h("p", { class: "hint live" }, `Tap a seat for ${sel.name}.`) : h("p", { class: "hint" }, "Drag a name to a seat, or tap a name, then a seat."),
       h("div", { class: "legend" }, h("span", {}, h("b", { class: "k-adult" }), "Adult"), h("span", {}, h("b", { class: "k-child" }), "Child"), h("span", {}, h("b", { class: "k-taken" }), "Taken")),
@@ -132,7 +142,7 @@ export class SeatMapScreen {
       if (book.getAttribute("aria-busy") === "true") return;
       book.setAttribute("aria-busy", "true");
       book.textContent = "Booking";
-      const ok = await this.ctx.run("book_together", { offerId: v.offerId });
+      const ok = await this.ctx.run("book_together", { offer_id: v.offerId });
       if (!ok) {
         book.removeAttribute("aria-busy");
         book.textContent = "Book it";
@@ -220,7 +230,7 @@ export class SeatMapScreen {
     this.selected = null;
     this.busy = true;
     this.cabinEl?.setAttribute("aria-busy", "true");
-    const ok = await this.ctx.run("move_traveler", { offerId: this.view.offerId, travelerName: t.name, seat });
+    const ok = await this.ctx.run("move_traveler", { offer_id: this.view.offerId, traveler: t.name, seat });
     this.busy = false;
     this.cabinEl?.removeAttribute("aria-busy");
     if (!ok) {

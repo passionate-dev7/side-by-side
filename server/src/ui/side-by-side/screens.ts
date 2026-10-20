@@ -1,6 +1,6 @@
 import type { BookedView, ErrorView, FamilyView, OfferCard, OffersView, StatusView } from "../../domain.js";
 import { h, type Child } from "./dom.js";
-import { checkedAt, clock, day, duration, money, partyLine, stops } from "./format.js";
+import { checkedAt, clock, day, money, partyLine, stops } from "./format.js";
 
 export interface Ctx {
   /** Calls a server tool, presents its result, and resolves false (after showing a toast) when it failed. */
@@ -23,13 +23,13 @@ export function chip(tone: "ok" | "warn" | "accent", text: string, dot = false):
 }
 
 function offerRow(o: OfferCard, v: OffersView, ctx: Ctx): HTMLElement {
-  const meta = [`${clock(o.departingAt)} to ${clock(o.arrivingAt)}`, stops(o.stops), duration(o.durationMinutes)].filter(Boolean).join(" · ");
+  const meta = `${clock(o.departingAt)} to ${clock(o.arrivingAt)} · ${stops(o.stops)}`;
   const priced = o.togetherTotal !== null;
   const delta =
     !priced ? "Seats not priced"
     : o.deltaVsCheapestFare === null ? ""
     : o.deltaVsCheapestFare <= 0 ? "Cheapest together"
-    : `+${money(o.deltaVsCheapestFare, v.currency)} vs cheapest fare`;
+    : `+${money(o.deltaVsCheapestFare, v.currency)} vs cheapest`;
   const btn = h(
     "button",
     { class: "offer", type: "button", "data-offer": o.offerId },
@@ -45,7 +45,7 @@ function offerRow(o: OfferCard, v: OffersView, ctx: Ctx): HTMLElement {
   btn.addEventListener("click", async () => {
     if (btn.getAttribute("aria-busy") === "true") return;
     btn.setAttribute("aria-busy", "true");
-    const ok = await ctx.run("show_seats", { offerId: o.offerId });
+    const ok = await ctx.run("show_seats", { offer_id: o.offerId });
     if (!ok) btn.removeAttribute("aria-busy");
   });
   return btn;
