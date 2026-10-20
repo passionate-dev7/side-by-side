@@ -90,13 +90,13 @@ export class SeatMapScreen {
       const chipEl = h(
         "button",
         {
-          class: `trav ${t.role === "child" ? "is-child" : "is-adult"}${len >= 7 ? " is-xlong" : len >= 5 ? " is-long" : ""}${flagged.has(t.id) ? " is-flagged" : ""}`,
+          class: `trav ${t.role === "child" ? "is-child" : "is-adult"}${len >= 7 ? " is-xlong" : len >= 4 ? " is-long" : ""}${flagged.has(t.id) ? " is-flagged" : ""}`,
           type: "button",
           "data-traveler": t.id,
           "aria-pressed": this.selected === t.id ? "true" : "false",
           "aria-label": `${t.name}, ${t.role}, seat ${c.designator}${flagged.has(t.id) ? ", needs an adult beside them" : ""}. Select to move.`,
         },
-        t.name,
+        h("span", { class: "nm" }, t.name),
       );
       chipEl.addEventListener("click", () => this.onChipClick(t.id));
       chipEl.addEventListener("pointerdown", (e) => this.onChipDown(e, chipEl, t.id));
@@ -130,7 +130,7 @@ export class SeatMapScreen {
         v.guarantee && v.seatFees === 0 ? chip("accent", "$0 seat fee") : null,
       ),
       sel ? h("p", { class: "hint live" }, `Tap a seat for ${sel.name}.`) : h("p", { class: "hint" }, "Drag a name to a seat, or tap a name, then a seat."),
-      h("div", { class: "legend" }, h("span", {}, h("b", { class: "k-adult" }), "Adult"), h("span", {}, h("b", { class: "k-child" }), "Child"), h("span", {}, h("b", { class: "k-taken" }), "Taken")),
+      h("div", { class: "legend" }, ...(["adult", "child", "taken"] as const).map((k) => h("span", {}, h("b", { class: `k-${k}`, "aria-hidden": "true" }), k === "adult" ? "Adult" : k === "child" ? "Child" : "Taken"))),
     );
   }
 

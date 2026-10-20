@@ -169,6 +169,7 @@ class Sim {
     try {
       const conn = await connectMcp(url, {
         onElicit: (params) => this.askUser(params),
+        onToolResult: (n, a, r) => this.remember(n, a, r),
         onClosed: (reason) => this.lost(reason),
       });
       this.backend = mcpBackend(conn);
@@ -183,6 +184,12 @@ class Sim {
       this.set({ conn: { status: "error", error: message } });
       await this.showCard("error", "Can't connect", message, []);
     }
+  }
+
+  /** Newest tool result wins, so leaving voice-only restores what the family last saw, even if a view asked for it. */
+  private remember(name: string, args: Record<string, unknown>, result: CallToolResult): void {
+    const tool = this.backend?.tools.find((t) => t.name === name);
+    if (tool && resourceUriOf(tool)) this.last = { tool, args, result };
   }
 
   private lost(reason: string): void {
@@ -310,7 +317,7 @@ class Sim {
     await this.dropView();
     if (old) await old.close().catch(() => undefined);
     try {
-      const conn = await connectMcp(this.state.url.trim(), { onElicit: (p) => this.askUser(p), onClosed: (r) => this.lost(r) });
+      const conn = await connectMcp(this.state.url.trim(), { onElicit: (p) => this.askUser(p), onToolResult: (n, a, r) => this.remember(n, a, r), onClosed: (r) => this.lost(r) });
       this.backend = mcpBackend(conn);
       this.set({ conn: { status: "connected", protocolVersion: conn.protocolVersion, serverName: conn.serverName, serverVersion: conn.serverVersion, sessionId: conn.sessionId, toolCount: conn.tools.length } });
       return this.backend;

@@ -101,7 +101,8 @@ export function statusScreen(v: StatusView): HTMLElement {
 }
 
 export function familyScreen(v: FamilyView): HTMLElement {
-  const missing = v.missingForBooking.length ? `Still needed to book: ${v.missingForBooking.join(", ")}.` : "";
+  const need = v.missingForBooking;
+  const missing = need.length ? `Still needed to book: ${need.slice(0, 3).join(", ")}${need.length > 3 ? ` and ${need.length - 3} more` : ""}.` : "";
   return screen(
     "family",
     head("Your party", [h("span", { class: "sub" }, partyLine(v.party))]),

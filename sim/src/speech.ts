@@ -14,6 +14,7 @@ interface Recognition {
   interimResults: boolean;
   continuous: boolean;
   maxAlternatives: number;
+  onstart: (() => void) | null;
   onresult: ((e: RecognitionEvent) => void) | null;
   onerror: ((e: { error: string; message?: string }) => void) | null;
   onend: (() => void) | null;
@@ -63,6 +64,16 @@ export function listen(handlers: {
   rec.continuous = false;
   rec.maxAlternatives = 1;
   let finalText = "";
+  let started = false;
+  const watchdog = setTimeout(() => {
+    if (started) return;
+    rec.abort();
+    handlers.onError("The browser never started listening. A microphone permission prompt may be waiting, or this browser has no speech service. Type instead.");
+  }, 10_000);
+  rec.onstart = () => {
+    started = true;
+    clearTimeout(watchdog);
+  };
   rec.onresult = (e) => {
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -74,12 +85,14 @@ export function listen(handlers: {
   };
   rec.onerror = (e) => handlers.onError(ERRORS[e.error] ?? `Speech recognition error: ${e.error}${e.message ? ` (${e.message})` : ""}`);
   rec.onend = () => {
+    clearTimeout(watchdog);
     if (finalText.trim()) handlers.onFinal(finalText.trim());
     handlers.onEnd();
   };
   try {
     rec.start();
   } catch (e) {
+    clearTimeout(watchdog);
     handlers.onError(`Could not start listening: ${e instanceof Error ? e.message : String(e)}`);
     handlers.onEnd();
     return null;

@@ -19,6 +19,7 @@ interface Flight {
   t0: number;
   method: string;
   note?: string;
+  params?: unknown;
 }
 
 const isRequest = (m: JSONRPCMessage): m is JSONRPCMessage & { method: string; id: Id } => "method" in m && "id" in m;
@@ -43,6 +44,8 @@ const clip = (v: unknown, n = 900): string => {
  * matching response message, so streamed (SSE) replies are timed to completion, not to first byte.
  */
 class WireTransport extends StreamableHTTPClientTransport {
+  /** Fires for every successful tools/call answer, whoever asked (the model or a view). */
+  onToolResult?: (name: string, args: Record<string, unknown>, result: CallToolResult) => void;
   private out = new Map<Id, Flight>();
   private inn = new Map<Id, Flight>();
 
@@ -75,9 +78,9 @@ class WireTransport extends StreamableHTTPClientTransport {
     if (isRequest(m)) {
       const note = noteFor(m.method, (m as { params?: unknown }).params);
       const row = eventLog.add({ source: "mcp", label: m.method, note });
-      this.out.set(m.id, { row, t0: performance.now(), method: m.method, note });
+      this.out.set(m.id, { row, t0: performance.now(), method: m.method, note, params: (m as { params?: unknown }).params });
     } else if (isNotification(m)) {
-      eventLog.add({ source: "mcp", label: m.method, note: "notification", status: "ok" });
+      eventLog.add({ source: "mcp", label: m.method, status: "ok" });
     } else if (isResponse(m)) {
       const f = this.inn.get(m.id);
       if (!f) return;
@@ -95,6 +98,10 @@ class WireTransport extends StreamableHTTPClientTransport {
       const err = "error" in m;
       const result = err ? undefined : ((m as { result: Record<string, unknown> }).result ?? {});
       const toolFailed = result?.isError === true;
+      if (f.method === "tools/call" && result && !err) {
+        const p = (f.params ?? {}) as { name?: unknown; arguments?: Record<string, unknown> };
+        if (typeof p.name === "string") this.onToolResult?.(p.name, p.arguments ?? {}, result as unknown as CallToolResult);
+      }
       const note = f.method === "initialize" && typeof result?.protocolVersion === "string" ? `protocol ${result.protocolVersion}` : undefined;
       eventLog.update(f.row, {
         status: err || toolFailed ? "error" : "ok",
@@ -116,6 +123,7 @@ class WireTransport extends StreamableHTTPClientTransport {
 
 export interface McpHandlers {
   onElicit(params: ElicitRequest["params"]): Promise<ElicitResult>;
+  onToolResult(name: string, args: Record<string, unknown>, result: CallToolResult): void;
   onClosed(reason: string): void;
 }
 
@@ -137,12 +145,13 @@ export async function connectMcp(url: string, handlers: McpHandlers): Promise<Mc
     throw new Error(`"${url}" is not a valid URL.`);
   }
   const transport = new WireTransport(endpoint);
+  transport.onToolResult = handlers.onToolResult;
   const client = new Client(
     { name: "Alexa+ Simulator (Side by Side)", version: "0.1.0" },
     { capabilities: { elicitation: {}, extensions: { [MCP_APPS_EXTENSION]: { mimeTypes: [MCP_APPS_MIME] } } } },
   );
   client.setRequestHandler(ElicitRequestSchema, (req) => handlers.onElicit(req.params));
-  client.onerror = (e) => eventLog.add({ source: "sys", label: "client error", status: "error", detail: e.message });
+  client.onerror = (e) => eventLog.add({ source: "sys", label: "client error", note: e.message.slice(0, 90), status: "error", detail: e.message });
   client.onclose = () => handlers.onClosed("The server closed the connection.");
 
   try {

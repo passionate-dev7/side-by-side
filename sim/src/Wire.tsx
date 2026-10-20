@@ -51,7 +51,7 @@ function Meter({ label, p50, p95, max, count }: { label: string; p50: number | n
         <span>max <b>{max === null ? "-" : `${max} ms`}</b></span>
       </div>
       <div className="track" role="img" aria-label={`p95 ${p95 ?? "none"} milliseconds against a ${BUDGET_MS} millisecond budget`}>
-        {p95 !== null ? <i className={`fill${over ? " bad" : ""}`} style={{ width: pct(p95) }} /> : null}
+        {p95 !== null ? <i className={`fill${over ? " bad" : ""}`} style={{ transform: `scaleX(${Math.min(1, p95 / (BUDGET_MS * 1.2))})` }} /> : null}
         <i className="mark" style={{ left: pct(BUDGET_MS) }} />
       </div>
       <div className="track-scale"><span>0</span><span style={{ left: pct(BUDGET_MS) }}>{BUDGET_MS} ms Alexa budget</span></div>

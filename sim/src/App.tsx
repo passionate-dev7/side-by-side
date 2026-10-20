@@ -106,7 +106,7 @@ function Composer({ state }: { state: SimState }) {
       <ul className="prompts" aria-label="Example requests">
         {PROMPTS.map((p) => (
           <li key={p}>
-            <button type="button" disabled={state.busy} onClick={() => send(p)}>
+            <button type="button" title={p} disabled={state.busy} onClick={() => send(p)}>
               {p}
             </button>
           </li>
