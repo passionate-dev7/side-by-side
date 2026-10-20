@@ -1,4 +1,4 @@
-// Usage: tsx scripts/lint-tools.ts [--url http://host:8787/mcp] [--plant]
+// Usage: tsx scripts/lint-tools.ts [--url http://host:8790/mcp] [--plant]
 //   default: lints this repo's server in-process. --url lints any MCP server over Streamable HTTP.
 //   --plant: adds a test-only poisoned tool to the in-process server to show the lint going red.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";

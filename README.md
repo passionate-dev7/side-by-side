@@ -24,7 +24,7 @@ Requires Node 24 or newer.
 npm install
 
 # 1. The MCP server. Put a Duffel test token (duffel_test_...) in DUFFEL_ACCESS_TOKEN first.
-npm run start -w server        # http://127.0.0.1:8787/mcp, health at /health
+npm run start -w server        # http://127.0.0.1:8790/mcp, health at /health
 
 # 2. The Echo Show simulator (needs one LLM credential in the environment, see below)
 npm run dev -w sim             # http://127.0.0.1:5173

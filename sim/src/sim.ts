@@ -7,7 +7,7 @@ import { modelTextOf, runTurn, systemPrompt, toToolDefs, LlmError } from "./orch
 import { listen, recognitionSupported, speak, stopSpeaking, synthesisSupported, type Listener } from "./speech";
 import { ViewHost, type DisplayMode, type HostContext } from "./viewhost";
 
-export const DEFAULT_MCP_URL = "http://127.0.0.1:8787/mcp";
+export const DEFAULT_MCP_URL = "http://127.0.0.1:8790/mcp";
 const URL_KEY = "sbs.mcpUrl";
 
 export type Theme = "dark" | "light";
