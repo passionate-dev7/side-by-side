@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=768,height=480">
+<title>World clock</title>
+<style>
+  :root { --bg:#14181E; --fg:#FFFFFF; --muted:#9AA4B2; --line:#2A313C; --accent:#F5A524; }
+  [data-theme="light"] { --bg:#FFFFFF; --fg:#14181E; --muted:#5B6573; --line:#E2E6EB; --accent:#B86E00; }
+  * { box-sizing:border-box; margin:0; }
+  html, body { width:768px; height:480px; overflow:hidden; background:var(--bg); color:var(--fg);
+    font-family:"Amazon Ember", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { height:100%; padding:24px; display:grid; grid-template-rows:auto 1fr auto; }
+  header { display:flex; justify-content:space-between; align-items:baseline; font-size:20px; color:var(--muted); }
+  #place { font-size:28px; color:var(--fg); }
+  #face { align-self:center; display:flex; align-items:baseline; gap:12px; }
+  #time { font-size:140px; font-weight:300; letter-spacing:-4px; line-height:1; font-variant-numeric:tabular-nums; }
+  #sec { font-size:48px; color:var(--accent); font-variant-numeric:tabular-nums; }
+  #meridiem { font-size:40px; color:var(--muted); }
+  footer { display:flex; justify-content:space-between; border-top:1px solid var(--line); padding-top:16px; font-size:24px; }
+  #offset { color:var(--accent); }
+  #err { font-size:28px; color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header><span id="place">World clock</span><span id="zone"></span></header>
+  <section id="face" aria-live="polite"><span id="err">Waiting for a time zone</span></section>
+  <footer><span id="date"></span><span id="offset"></span></footer>
+</main>
+<!--SCRIPT-->
+</body>
+</html>

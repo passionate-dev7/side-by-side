@@ -1,0 +1,7 @@
+node_modules
+dist
+server/ui-dist
+.env
+.env.*
+!.env.example
+*.log
