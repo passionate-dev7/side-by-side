@@ -10,7 +10,8 @@
     "start": "npm run build:ui && tsx src/index.ts",
     "test": "npm run build:ui && vitest run",
     "typecheck": "tsc -p .",
-    "fixture": "npm run build:ui && tsx scripts/fixture-server.ts"
+    "fixture": "npm run build:ui && tsx scripts/fixture-server.ts",
+    "lint:tools": "tsx scripts/lint-tools.ts"
   },
   "dependencies": {
     "@duffel/api": "^4.31.0",
