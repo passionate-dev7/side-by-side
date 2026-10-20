@@ -53,6 +53,15 @@ export interface OfferCard {
   deltaVsCheapestFare: number | null;
 }
 
+/** Result of save_family: who is traveling, shown as a party card. */
+export interface FamilyView {
+  kind: "family";
+  party: Traveler[];
+  /** Fields still needed before booking, for example "Mia's date of birth". */
+  missingForBooking: string[];
+  voice: string;
+}
+
 export interface OffersView {
   kind: "offers";
   testMode: boolean;
@@ -118,4 +127,4 @@ export interface ErrorView {
   voice: string;
 }
 
-export type View = OffersView | SeatMapView | BookedView | StatusView | ErrorView;
+export type View = FamilyView | OffersView | SeatMapView | BookedView | StatusView | ErrorView;

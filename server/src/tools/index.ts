@@ -1,5 +1,6 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ToolModule } from "./shared.js";
+import { register as registerFamilyTools } from "./family-tools.js";
 import { register as registerWorldClock } from "./world-clock.js";
 
-/** Product tools drop in here: each module exports register(server). */
-export const toolModules: Array<(server: McpServer) => void> = [registerWorldClock];
+/** Product tools drop in here: each module registers its tools and UI resources on the server. */
+export const toolModules: ToolModule[] = [registerFamilyTools, registerWorldClock];

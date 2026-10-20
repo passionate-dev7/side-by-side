@@ -5,6 +5,7 @@ import cors from "cors";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest, SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 import { createMcpServer, SERVER_INFO } from "./mcp.js";
+import type { Ctx } from "./service.js";
 
 export interface AppOptions {
   /** Extra browser origins allowed besides localhost, for example a tunnel hostname. */
@@ -19,7 +20,7 @@ function rpcError(res: Response, status: number, code: number, message: string) 
   res.status(status).json({ jsonrpc: "2.0", error: { code, message }, id: null });
 }
 
-export function createApp(opts: AppOptions = {}) {
+export function createApp(ctx: Ctx, opts: AppOptions = {}) {
   const extra = new Set(opts.allowedOrigins ?? []);
   const originAllowed = (origin: string) => {
     if (extra.has(origin)) return true;
@@ -34,7 +35,7 @@ export function createApp(opts: AppOptions = {}) {
   const app = express();
 
   app.get("/health", (_req, res) => {
-    res.json({ status: "ok", ...SERVER_INFO, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS, sessions: sessions.size });
+    res.json({ status: "ok", ...SERVER_INFO, protocolVersions: SUPPORTED_PROTOCOL_VERSIONS, sessions: sessions.size, flights: ctx.duffel ? "connected" : "DUFFEL_ACCESS_TOKEN not set" });
   });
 
   // Streamable HTTP spec: servers MUST validate Origin and answer 403 when it is not allowed.
@@ -76,13 +77,13 @@ export function createApp(opts: AppOptions = {}) {
       transport.onclose = () => {
         if (transport.sessionId) sessions.delete(transport.sessionId);
       };
-      await createMcpServer().connect(transport);
+      await createMcpServer(ctx).connect(transport);
       return transport.handleRequest(req, res, req.body);
     }
     // Alexa+ rebuilds context itself and does not hold an MCP session id, so a request
     // with no session header is served statelessly instead of rejected.
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    const server = createMcpServer();
+    const server = createMcpServer(ctx);
     res.on("close", () => void transport.close().then(() => server.close()));
     await server.connect(transport);
     return transport.handleRequest(req, res, req.body);

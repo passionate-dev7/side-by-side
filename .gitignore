@@ -5,3 +5,4 @@ server/ui-dist
 .env.*
 !.env.example
 *.log
+data

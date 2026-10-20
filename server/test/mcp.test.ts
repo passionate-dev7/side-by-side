@@ -4,14 +4,19 @@ import type { Server } from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { createApp } from "../src/app.js";
+import { createCtx } from "../src/service.js";
+import { openStore } from "../src/store.js";
+import { FakeDuffel, NOW } from "./fixtures/fake-duffel.js";
+import { toolModules } from "../src/tools/index.js";
 
 let http: Server;
 let handle: ReturnType<typeof createApp>;
 let base: string;
 
 beforeAll(async () => {
-  handle = createApp();
+  handle = createApp(createCtx({ duffel: new FakeDuffel(), store: openStore(":memory:"), now: () => NOW, poll: { attempts: 3, delayMs: 1 } }));
   await new Promise<void>((ok) => {
     http = handle.app.listen(0, "127.0.0.1", () => ok());
   });
@@ -56,7 +61,7 @@ describe("protocol negotiation", () => {
     const r = await rpc(init(v));
     expect(r.status).toBe(200);
     expect(r.json.result.protocolVersion).toBe(v);
-    expect(r.json.result.serverInfo.name).toBe("alexa-mcp-base");
+    expect(r.json.result.serverInfo.name).toBe("side-by-side");
     expect(r.json.result.capabilities.tools).toBeDefined();
     expect(r.headers.get("mcp-session-id")).toMatch(/^[0-9a-f-]{36}$/);
   });
@@ -72,7 +77,7 @@ describe("protocol negotiation", () => {
     const headers = { "mcp-session-id": sid, "mcp-protocol-version": "2025-03-26" };
     expect((await rpc({ jsonrpc: "2.0", method: "notifications/initialized" }, headers)).status).toBe(202);
     const l = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, headers);
-    expect(l.json.result.tools.map((t: { name: string }) => t.name)).toContain("world_clock");
+    expect(l.json.result.tools.map((t: { name: string }) => t.name)).toContain("find_family_flights");
   });
 
   it("rejects an unsupported MCP-Protocol-Version header on a later request", async () => {
@@ -90,9 +95,9 @@ describe("sessions", () => {
   });
 
   it("serves a request with no session and no initialize (Alexa+ style) statelessly", async () => {
-    const r = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "world_clock", arguments: { timezone: "Asia/Tokyo" } } });
+    const r = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "save_family", arguments: { travelers: [{ name: "Dad", age: 40 }, { name: "Mia", age: 6 }] } } });
     expect(r.status).toBe(200);
-    expect(r.json.result.structuredContent.timezone).toBe("Asia/Tokyo");
+    expect(r.json.result.structuredContent.kind).toBe("family");
   });
 
   it("closing the client removes the session", async () => {
@@ -107,39 +112,51 @@ describe("sessions", () => {
   });
 });
 
+const SEATS_URI = "ui://side-by-side/seats.html";
+const PRODUCT_TOOLS = ["save_family", "find_family_flights", "show_seats", "move_traveler", "book_together", "still_together"];
+const save = (client: Client) =>
+  client.callTool({
+    name: "save_family",
+    arguments: { travelers: [{ name: "Dad", age: 40 }, { name: "Mum", age: 38 }, { name: "Mia", age: 6 }, { name: "Leo", age: 9 }] },
+  });
+
 describe("tools through the SDK client", () => {
-  it("tools/list exposes world_clock with its MCP Apps UI resource", async () => {
+  it("tools/list exposes the six product tools, each bound to the MCP Apps seat view, with short honest descriptions", async () => {
     const client = await connect();
     const { tools } = await client.listTools();
-    const clock = tools.find((t) => t.name === "world_clock")!;
-    expect(clock).toBeDefined();
-    expect((clock._meta as { ui: { resourceUri: string } }).ui.resourceUri).toBe("ui://alexa-base/world-clock.html");
-    expect(clock.inputSchema.properties).toHaveProperty("timezone");
+    for (const name of PRODUCT_TOOLS) {
+      const t = tools.find((x) => x.name === name)!;
+      expect(t, name).toBeDefined();
+      expect((t._meta as { ui: { resourceUri: string } }).ui.resourceUri).toBe(SEATS_URI);
+      expect(t.description!.length).toBeLessThanOrEqual(300);
+    }
+    const find = tools.find((t) => t.name === "find_family_flights")!;
+    expect(Object.keys(find.inputSchema.properties!).sort()).toEqual(["cabin", "departure_date", "destination", "origin"]);
+    expect(toolModules.length).toBeGreaterThan(0);
     await client.close();
   });
 
   it("tools/call returns structured content plus a spoken text mirror, under the 500 ms budget", async () => {
     const client = await connect();
     const t0 = performance.now();
-    const res = await client.callTool({ name: "world_clock", arguments: { timezone: "Asia/Tokyo" } });
+    const res = await save(client);
     const ms = performance.now() - t0;
-    const sc = res.structuredContent as { timezone: string; utcOffset: string; iso: string };
+    const sc = res.structuredContent as { kind: string; party: Array<{ name: string; role: string }> };
     expect(res.isError).toBeFalsy();
-    expect(sc.timezone).toBe("Asia/Tokyo");
-    expect(sc.utcOffset).toBe("GMT+09:00");
-    expect(Math.abs(Date.now() - Date.parse(sc.iso))).toBeLessThan(5000);
-    expect((res.content as Array<{ text: string }>)[0].text).toMatch(/^It is .+ in Tokyo, on .+\.$/);
+    expect(sc.kind).toBe("family");
+    expect(sc.party.map((p) => p.role)).toEqual(["adult", "adult", "child", "child"]);
+    expect((res.content as Array<{ text: string }>)[0].text).toMatch(/Mia and Leo beside an adult/);
     expect(ms).toBeLessThan(500);
     await client.close();
   });
 
   it("resources/read returns the 768x480 view with the MCP Apps mime type", async () => {
     const client = await connect();
-    const { contents } = await client.readResource({ uri: "ui://alexa-base/world-clock.html" });
+    const { contents } = await client.readResource({ uri: SEATS_URI });
     expect(contents[0].mimeType).toBe(RESOURCE_MIME_TYPE);
     const html = (contents[0] as { text: string }).text;
-    expect(html).toContain("width:768px");
-    expect(html).toContain("height:480px");
+    expect(html).toContain("768px");
+    expect(html).toContain("480px");
     await client.close();
   });
 
@@ -154,12 +171,59 @@ describe("tools through the SDK client", () => {
     await client.close();
   });
 
-  it("an invalid time zone returns a structured, speakable error instead of nothing", async () => {
+  it("bad input is rejected by the declared schema instead of being guessed at", async () => {
     const client = await connect();
-    const res = await client.callTool({ name: "world_clock", arguments: { timezone: "Mars/Olympus" } });
+    const res = await client.callTool({ name: "save_family", arguments: { travelers: [{ name: "Baby", age: 1 }] } });
     expect(res.isError).toBe(true);
-    expect((res.structuredContent as { error: string }).error).toBe("invalid_timezone");
-    expect((res.content as Array<{ text: string }>)[0].text).toMatch(/Mars\/Olympus/);
+    const bad = await client.callTool({ name: "find_family_flights", arguments: { origin: "New York", destination: "MCO", departure_date: "tomorrow" } });
+    expect(bad.isError).toBe(true);
+    await client.close();
+  });
+
+  it("a tool that cannot proceed still answers with a structured, speakable error", async () => {
+    const client = await connect();
+    const res = await client.callTool({ name: "show_seats", arguments: { offer_id: "off_that_does_not_exist" } });
+    expect(res.isError).toBe(true);
+    expect((res.structuredContent as { kind: string; code: string }).kind).toBe("error");
+    expect((res.content as Array<{ text: string }>)[0].text.length).toBeGreaterThan(10);
+    await client.close();
+  });
+
+  it("books over the wire: search, seat map, move, then book with elicitation for details and a confirm", async () => {
+    const client = new Client({ name: "test-client", version: "0.0.0" }, { capabilities: { elicitation: {} } });
+    const asked: string[][] = [];
+    client.setRequestHandler(ElicitRequestSchema, async (req) => {
+      const props = (req.params as unknown as { requestedSchema: { properties: Record<string, unknown> } }).requestedSchema.properties;
+      asked.push(Object.keys(props));
+      if ("confirm" in props) return { action: "accept", content: { confirm: true } };
+      return { action: "accept", content: { dad_born_on: "1986-03-02", dad_gender: "m", mum_born_on: "1988-07-19", mum_gender: "f", mia_born_on: "2020-05-11", mia_gender: "f", leo_born_on: "2017-01-30", leo_gender: "m", family_name: "Rivera", email: "family@example.com", phone_number: "+12125550123" } };
+    });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
+    await save(client);
+
+    const found = await client.callTool({ name: "find_family_flights", arguments: { origin: "jfk", destination: "MCO", departure_date: "2026-11-25" } });
+    const offers = (found.structuredContent as { offers: Array<{ offerId: string; airline: { iata: string }; togetherTotal: number | null }> }).offers;
+    expect(offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "ZZ", "UA"]);
+
+    const seats = await client.callTool({ name: "show_seats", arguments: { offer_id: "off_delta" } });
+    expect((seats.structuredContent as { together: string }).together).toBe("TOGETHER");
+    const moved = await client.callTool({ name: "move_traveler", arguments: { offer_id: "off_delta", traveler: "Mia", seat: "1A" } });
+    expect((moved.structuredContent as { together: string }).together).toBe("NOT_TOGETHER");
+    const refused = await client.callTool({ name: "book_together", arguments: { offer_id: "off_delta" } });
+    expect(refused.isError).toBe(true);
+    expect((refused.structuredContent as { code: string }).code).toBe("not_together");
+    expect(asked).toEqual([]);
+
+    await client.callTool({ name: "show_seats", arguments: { offer_id: "off_duffel_airways" } });
+    const booked = await client.callTool({ name: "book_together", arguments: { offer_id: "off_duffel_airways" } });
+    expect(booked.isError).toBeFalsy();
+    const sc = booked.structuredContent as { kind: string; bookingReference: string; total: number; testMode: boolean };
+    expect(sc).toMatchObject({ kind: "booked", bookingReference: "FXT4KQ", total: 1010, testMode: true });
+    expect(asked).toHaveLength(2);
+    expect(asked[1]).toEqual(["confirm"]);
+
+    const still = await client.callTool({ name: "still_together", arguments: {} });
+    expect((still.structuredContent as { kind: string; together: boolean }).together).toBe(true);
     await client.close();
   });
 });

@@ -119,7 +119,10 @@ export function feeOf(seat: GridSeat | undefined, passengerId: string): number |
   return f === undefined ? null : f;
 }
 
-/** A window of up to `count` seat rows that contains the assigned seats when they fit, centred otherwise on the first. */
+/**
+ * Up to `count` seat rows to draw: every row holding an assigned seat first, then the rows around them, in cabin order.
+ * Rows need not be consecutive when the party is split far apart; a gap in the row numbers is a visible break.
+ */
 export function viewRows(
   grid: Grid,
   occupant: Map<string, string>,
@@ -128,16 +131,23 @@ export function viewRows(
 ): SeatRow[] {
   const seatRows = grid.rows.filter((r) => r.number !== null);
   if (seatRows.length === 0) return [];
-  const idx = assigned
-    .map((d) => grid.seats.get(d))
-    .filter((s): s is GridSeat => !!s)
-    .map((s) => seatRows.findIndex((r) => r.number === s.row))
-    .filter((i) => i >= 0);
-  const lo = idx.length ? Math.min(...idx) : 0;
-  const hi = idx.length ? Math.max(...idx) : 0;
-  let start = hi - lo + 1 <= count ? Math.floor((lo + hi + 1 - count) / 2) : lo - 1;
-  start = Math.max(0, Math.min(start, seatRows.length - count));
-  return seatRows.slice(start, start + count).map((r) => ({
+  const idx = [
+    ...new Set(
+      assigned
+        .map((d) => grid.seats.get(d))
+        .filter((s): s is GridSeat => !!s)
+        .map((s) => seatRows.findIndex((r) => r.number === s.row))
+        .filter((i) => i >= 0),
+    ),
+  ].sort((x, y) => x - y);
+  const chosen = new Set(idx.slice(0, count));
+  for (let radius = 1; chosen.size < count && radius < seatRows.length; radius++) {
+    for (const i of idx) {
+      for (const j of [i - radius, i + radius]) if (j >= 0 && j < seatRows.length && chosen.size < count) chosen.add(j);
+    }
+  }
+  if (chosen.size < count) for (let i = 0; i < seatRows.length && chosen.size < count; i++) chosen.add(i);
+  return [...chosen].sort((x, y) => x - y).map((i) => seatRows[i]).map((r) => ({
     row: r.number!,
     cells: r.sections.flatMap((sec, si): Cell[] => {
       const cells = sec.map((el): Cell => {

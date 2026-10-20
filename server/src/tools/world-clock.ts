@@ -44,7 +44,7 @@ export function register(server: McpServer): void {
         timezone: z.string().min(1).default("UTC").describe("IANA time zone name, for example Europe/Paris"),
       },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-      _meta: { ui: { resourceUri: WORLD_CLOCK_URI }, "alexa/invoking": "Checking the time", "alexa/invoked": "Here is the time" },
+      _meta: { ui: { resourceUri: WORLD_CLOCK_URI } },
     },
     async ({ timezone }) => {
       try {
