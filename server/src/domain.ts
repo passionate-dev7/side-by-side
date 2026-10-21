@@ -111,6 +111,12 @@ export interface OffersView {
   route: { origin: string; destination: string; departureDate: string; returnDate: string | null };
   party: Traveler[];
   offers: OfferCard[];
+  /** "searching": seat maps are still being read, and `offers` holds what has priced so far. Ask again, or let the view refresh. */
+  status: "searching" | "ready";
+  /** Seat maps read so far, of the fares chosen for reading. */
+  checking: { done: number; of: number };
+  /** The arguments that repeat this search; a repeat returns the same search, not a new one. */
+  query: { origin: string; destination: string; departure_date: string; cabin: string };
   /** How many offers the search returned. */
   searched: number;
   /** How many of those had their seat map read and the seating solved before ranking. */

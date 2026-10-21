@@ -119,6 +119,7 @@ describe("find_family_flights", () => {
     expect(v.voice).toMatch(/I read seat maps for 10 of 12 fares, cheapest first\.$/);
     expect(v.offers.length).toBeLessThanOrEqual(5);
     fake.moreBeyond = true;
+    ctx.searches.clear();
     const more = await findFamilyFlights(ctx, SEARCH);
     expect([more.searched, more.evaluated, more.moreAvailable]).toEqual([12, 10, true]);
     expect(more.voice).toMatch(/10 of 12\+ fares/);

@@ -106,6 +106,13 @@ export class FakeDuffel implements DuffelPort {
   readonly noSeatMap = new Set<string>();
   /** Only for testing that labels follow the data's mode. The emulator is never live. */
   live = false;
+  /** When offers it sells expire. */
+  expiresAt = "2026-10-21T12:30:00Z";
+  /** Network time the emulator takes per call, so latency-sensitive behavior can be tested. Zero by default. */
+  delay = { search: 0, order: 0, seatMaps: (_offerId: string): number => 0 };
+  /** Most seat map requests that were in flight at once. */
+  peakSeatMaps = 0;
+  private liveSeatMaps = 0;
   /** Pretend the airline holds more offers than the page returned. */
   moreBeyond = false;
   /** Polls before an order shows a booking reference. */
@@ -115,6 +122,7 @@ export class FakeDuffel implements DuffelPort {
 
   async searchOffers(req: SearchRequest) {
     this.calls.push("searchOffers");
+    if (this.delay.search) await new Promise((r) => setTimeout(r, this.delay.search));
     this.requestPassengerIds = req.passengers.map((_, i) => `pas_${i}`);
     this.offers.clear();
     const offers: OfferSummary[] = [];
@@ -162,7 +170,7 @@ export class FakeDuffel implements DuffelPort {
         cabinClass: req.cabin,
         fareBrand: sc.fareBrand ?? null,
         passengerIds: this.requestPassengerIds,
-        expiresAt: "2026-10-21T12:30:00Z",
+        expiresAt: this.expiresAt,
         liveMode: this.live,
       };
       this.offers.set(sc.id, { summary, map, services });
@@ -173,6 +181,13 @@ export class FakeDuffel implements DuffelPort {
 
   async seatMaps(offerId: string) {
     this.calls.push(`seatMaps:${offerId}`);
+    this.peakSeatMaps = Math.max(this.peakSeatMaps, ++this.liveSeatMaps);
+    try {
+      const wait = this.delay.seatMaps(offerId);
+      if (wait) await new Promise((r) => setTimeout(r, wait));
+    } finally {
+      this.liveSeatMaps--;
+    }
     const o = this.offers.get(offerId);
     if (!o) throw new DuffelApiError("not_found", "offer not found", 404);
     if (this.noSeatMap.has(offerId)) return [];

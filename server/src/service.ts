@@ -24,6 +24,7 @@ import type {
 import { DuffelApiError, type CabinClass, type DuffelPort, type OfferSummary } from "./duffel.js";
 import { DOT_CHILD_MAX_AGE, DOT_SOURCE, dotFeeFreeAdjacent } from "./dot.js";
 import { evaluateWaiver } from "./waiver.js";
+import { mapLimit, within } from "./jobs.js";
 import { buildGrid, gridFromLayout, layoutOf, viewRows, type Grid } from "./seatmap.js";
 import { evaluateAssignment, isAdjacencyFinding, solveSeating, type PartyMember, type Solution } from "./solver.js";
 import type { BookedOrder, Family, FamilyMember, Plan, Store } from "./store.js";
@@ -54,6 +55,25 @@ interface OfferEntry {
   maps?: { raw: SeatMap[]; grid: Grid; solution: Solution; price: Price; fetchedAt: number };
 }
 
+/** One search, shared by every repeat of it. Seat maps are read in the background; the tool answers with what is ready. */
+interface SearchJob {
+  key: string;
+  input: FindInput;
+  startedAt: number;
+  status: "searching" | "ready" | "failed";
+  liveMode: boolean;
+  moreAvailable: boolean;
+  found: number;
+  toCheck: number;
+  checked: number;
+  currency: string;
+  cheapestFare: number;
+  /** Entries whose seat map was read and priced. */
+  entries: OfferEntry[];
+  error?: ToolError;
+  done: Promise<void>;
+}
+
 export interface Ctx {
   duffel: DuffelPort | null;
   store: Store;
@@ -64,6 +84,13 @@ export interface Ctx {
   offers: Map<string, OfferEntry>;
   /** Poll settings for order confirmation. */
   poll: { attempts: number; delayMs: number };
+  /** How long a tool waits for background work before it answers with what it has. Alexa+ allows a tool 500 ms. */
+  budgetMs: number;
+  /** Seat map requests in flight at once during a search. */
+  seatMapConcurrency: number;
+  /** A finished search is reused for this long, and never past the expiry of any of its offers. */
+  searchTtlMs: number;
+  searches: Map<string, SearchJob>;
 }
 
 export function createCtx(parts: Pick<Ctx, "duffel" | "store"> & Partial<Ctx>): Ctx {
@@ -73,6 +100,10 @@ export function createCtx(parts: Pick<Ctx, "duffel" | "store"> & Partial<Ctx>): 
     seatMapTtlMs: 5 * 60_000,
     offers: new Map(),
     poll: { attempts: 20, delayMs: 1000 },
+    budgetMs: 200,
+    seatMapConcurrency: 4,
+    searchTtlMs: 120_000,
+    searches: new Map(),
     ...parts,
   };
 }
@@ -191,9 +222,19 @@ function airlineInfo(a: { name: string; iata: string }): AirlineInfo {
   return { name: a.name, iata: a.iata, dotFeeFreeAdjacent: dotFeeFreeAdjacent(a.iata) };
 }
 
+const expired = (ctx: Ctx, o: OfferSummary) => ctx.now() >= new Date(o.expiresAt);
+
+/**
+ * A cached seat map prices only while its offer is alive and the map is younger than the TTL. Once the offer has expired
+ * the map belongs to a fare that can no longer be bought, so nothing is priced from it.
+ */
+function usable(ctx: Ctx, entry: OfferEntry): boolean {
+  return !!entry.maps && !expired(ctx, entry.summary) && ctx.now().getTime() - entry.maps.fetchedAt < ctx.seatMapTtlMs;
+}
+
 async function loadMaps(ctx: Ctx, entry: OfferEntry, family: Family, force = false): Promise<NonNullable<OfferEntry["maps"]> | null> {
-  const fresh = entry.maps && ctx.now().getTime() - entry.maps.fetchedAt < ctx.seatMapTtlMs;
-  if (fresh && !force) return entry.maps!;
+  if (expired(ctx, entry.summary)) throw new ToolError("offer_expired", "That fare has expired.", "That fare expired. Let me search again.");
+  if (usable(ctx, entry) && !force) return entry.maps!;
   const raw = await wrapDuffel(duffelOrThrow(ctx).seatMaps(entry.summary.id));
   const map = raw.find((m) => m.segment_id === entry.summary.segmentId) ?? raw[0];
   if (!map) return null;
@@ -289,9 +330,19 @@ const SEARCH_LIMIT = 10;
 /** Offers fetched per search so the list can say how many fares exist (Duffel returns at most 200 per page). */
 const SEARCH_FETCH = 200;
 
-export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<OffersView> {
-  const family = requireFamily(ctx);
+const familyKey = (family: Family) => family.members.map((m) => `${m.id}:${m.age}:${m.seatPreference ?? ""}`).join(",");
+const searchKey = (input: FindInput, family: Family) => `${input.origin}|${input.destination}|${input.departureDate}|${input.cabin}|${familyKey(family)}`;
+
+function reusable(ctx: Ctx, job: SearchJob): boolean {
+  if (job.status === "failed") return false;
+  if (job.status === "searching") return true;
+  const fresh = ctx.now().getTime() - job.startedAt < ctx.searchTtlMs;
+  return fresh && job.entries.every((e) => !expired(ctx, e.summary));
+}
+
+async function runSearch(ctx: Ctx, job: SearchJob, family: Family): Promise<void> {
   const duffel = duffelOrThrow(ctx);
+  const input = job.input;
   const res = await wrapDuffel(duffel.searchOffers({ ...input, passengers: family.members.map((m) => ({ age: m.age })), limit: SEARCH_FETCH }));
   if (res.offers.length === 0) {
     throw new ToolError("no_offers", `No direct flights found from ${input.origin} to ${input.destination} on ${input.departureDate}.`, `I found no direct flights from ${input.origin} to ${input.destination} on that date.`);
@@ -299,76 +350,123 @@ export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<Off
   const checked = res.offers.slice(0, SEARCH_LIMIT);
   const search: SearchRecord = { offerIds: checked.map((o) => o.id) };
   for (const o of checked) ctx.offers.set(o.id, { summary: o, search });
+  Object.assign(job, { found: res.offers.length, toCheck: checked.length, liveMode: res.liveMode, moreAvailable: res.moreAvailable, currency: res.offers[0].currency, cheapestFare: Math.min(...res.offers.map((o) => o.totalAmount)) });
 
-  const priced = await Promise.all(
-    checked.map(async (o) => {
-      try {
-        const maps = await loadMaps(ctx, ctx.offers.get(o.id)!, family);
-        return { o, maps };
-      } catch (e) {
-        if (e instanceof ToolError) return { o, maps: null };
-        throw e;
-      }
-    }),
-  );
-  const currency = res.offers[0].currency;
-  const cheapestFare = Math.min(...res.offers.map((o) => o.totalAmount));
+  // Seat maps are read in parallel, a few at a time, and each priced offer is visible to the next answer as soon as it lands.
+  await mapLimit(checked, ctx.seatMapConcurrency, async (o) => {
+    const entry = ctx.offers.get(o.id)!;
+    try {
+      if (await loadMaps(ctx, entry, family)) job.entries.push(entry);
+    } catch (e) {
+      if (!(e instanceof ToolError)) throw e;
+    } finally {
+      job.checked++;
+    }
+  });
+  if (job.entries.length === 0) {
+    throw new ToolError("no_seat_maps", "None of the flights publish a seat map, so I cannot check seating.", "None of those airlines share a seat map, so I cannot check where your family would sit.");
+  }
+  job.status = "ready";
+}
 
-  const cards: OfferCard[] = priced
-    .filter((p): p is { o: OfferSummary; maps: NonNullable<OfferEntry["maps"]> } => p.maps !== null)
-    .map(({ o, maps }) => {
-      const { together, guarantee, seatFees, total, waiver, seatLines, waivedFees } = maps.price;
-      const status: TogetherStatus = together ? "TOGETHER" : "NOT_TOGETHER";
-      return {
-        offerId: o.id,
-        airline: airlineInfo(o.airline),
-        departingAt: o.departingAt,
-        arrivingAt: o.arrivingAt,
-        stops: 0,
-        durationMinutes: o.durationMinutes,
-        fare: o.totalAmount,
-        seatFees,
-        guarantee,
-        waiver,
-        seatLines,
-        waivedFees,
-        togetherTotal: total,
-        together: status,
-        deltaVsCheapestFare: total === null ? null : Math.round((total - cheapestFare) * 100) / 100,
-      };
-    });
+function startSearch(ctx: Ctx, input: FindInput, family: Family, key: string): SearchJob {
+  const job: SearchJob = { key, input, startedAt: ctx.now().getTime(), status: "searching", liveMode: false, moreAvailable: false, found: 0, toCheck: 0, checked: 0, currency: "USD", cheapestFare: 0, entries: [], done: Promise.resolve() };
+  job.done = runSearch(ctx, job, family).catch((e: unknown) => {
+    job.status = "failed";
+    job.error = e instanceof ToolError ? e : new ToolError("internal_error", "Something went wrong inside the add-on.", "Something went wrong on my side. I have not changed anything.");
+    if (!(e instanceof ToolError)) console.error("search failed:", e instanceof Error ? e.message : e);
+  });
+  ctx.searches.set(key, job);
+  return job;
+}
 
+/** The ranked offers of a search as far as it has got. */
+function offersView(ctx: Ctx, job: SearchJob, family: Family): OffersView {
+  const input = job.input;
+  const cards: OfferCard[] = job.entries.map((entry) => {
+    const o = entry.summary;
+    const { together, guarantee, seatFees, total, waiver, seatLines, waivedFees } = entry.maps!.price;
+    return {
+      offerId: o.id,
+      airline: airlineInfo(o.airline),
+      departingAt: o.departingAt,
+      arrivingAt: o.arrivingAt,
+      stops: 0,
+      durationMinutes: o.durationMinutes,
+      fare: o.totalAmount,
+      seatFees,
+      guarantee,
+      waiver,
+      seatLines,
+      waivedFees,
+      togetherTotal: total,
+      together: (together ? "TOGETHER" : "NOT_TOGETHER") as TogetherStatus,
+      deltaVsCheapestFare: total === null ? null : Math.round((total - job.cheapestFare) * 100) / 100,
+    };
+  });
   cards.sort((a, b) => {
     if ((a.together === "TOGETHER") !== (b.together === "TOGETHER")) return a.together === "TOGETHER" ? -1 : 1;
     return (a.togetherTotal ?? a.fare) - (b.togetherTotal ?? b.fare) || a.fare - b.fare || a.offerId.localeCompare(b.offerId);
   });
   const top = cards.slice(0, 5);
-  if (top.length === 0) {
-    throw new ToolError("no_seat_maps", "None of the flights publish a seat map, so I cannot check seating.", "None of those airlines share a seat map, so I cannot check where your family would sit.");
-  }
+  const currency = job.currency;
+  const searching = job.status === "searching";
 
-  const best = top[0];
-  const cheapestCard = cards.find((c) => c.fare === Math.min(...cards.map((x) => x.fare)));
-  const voice =
-    best.together === "TOGETHER"
-      ? `${best.airline.name} is the best way to sit together: ${money(best.togetherTotal!, currency)} total${best.guarantee ? `, and ${best.airline.name} seats a child beside an adult at no fee` : best.seatFees > 0 ? `, including ${money(best.seatFees, currency)} in seat fees` : ""}.` +
-        (cheapestCard && cheapestCard.offerId !== best.offerId ? ` The cheapest fare is ${cheapestCard.airline.name} at ${money(cheapestCard.fare, currency)}${cheapestCard.together === "TOGETHER" ? `, ${money(cheapestCard.togetherTotal! - cheapestCard.fare, currency)} more to sit together` : ", but your family cannot sit together on it"}.` : "")
-      : "No flight lets the whole family sit together on that day.";
-  const tail = cards.length < res.offers.length || res.moreAvailable ? ` I read seat maps for ${cards.length} of ${res.offers.length}${res.moreAvailable ? "+" : ""} fares, cheapest first.` : "";
+  let voice: string;
+  if (!top.length) {
+    voice = job.found
+      ? `I found ${job.found} direct fares and I am reading seat maps on the ${job.toCheck} cheapest. The screen fills in as each one comes back.`
+      : `I am searching ${input.origin} to ${input.destination}. The screen fills in as the fares come back.`;
+  } else {
+    const best = top[0];
+    const cheapestCard = cards.find((c) => c.fare === Math.min(...cards.map((x) => x.fare)));
+    voice =
+      best.together === "TOGETHER"
+        ? `${searching ? "So far, " : ""}${best.airline.name} is the best way to sit together: ${money(best.togetherTotal!, currency)} total${best.guarantee ? `, and ${best.airline.name} seats a child beside an adult at no fee` : best.seatFees > 0 ? `, including ${money(best.seatFees, currency)} in seat fees` : ""}.` +
+          (cheapestCard && cheapestCard.offerId !== best.offerId ? ` The cheapest fare is ${cheapestCard.airline.name} at ${money(cheapestCard.fare, currency)}${cheapestCard.together === "TOGETHER" ? `, ${money(cheapestCard.togetherTotal! - cheapestCard.fare, currency)} more to sit together` : ", but your family cannot sit together on it"}.` : "")
+        : searching ? "No flight so far lets the whole family sit together." : "No flight lets the whole family sit together on that day.";
+    voice += searching ? ` I am still reading seat maps, ${job.checked} of ${job.toCheck} done, and the screen updates as they land.` : cards.length < job.found || job.moreAvailable ? ` I read seat maps for ${cards.length} of ${job.found}${job.moreAvailable ? "+" : ""} fares, cheapest first.` : "";
+  }
 
   return {
     kind: "offers",
-    testMode: !res.liveMode,
+    testMode: !job.liveMode,
     currency,
     route: { origin: input.origin, destination: input.destination, departureDate: input.departureDate, returnDate: null },
     party: family.members.map(toTraveler),
     offers: top,
-    searched: res.offers.length,
+    status: searching ? "searching" : "ready",
+    checking: { done: job.checked, of: job.toCheck },
+    query: { origin: input.origin, destination: input.destination, departure_date: input.departureDate, cabin: input.cabin },
+    searched: job.found,
     evaluated: cards.length,
-    moreAvailable: res.moreAvailable,
-    provenance: provenanceOf(ctx, best.airline.iata, res.liveMode, false),
-    voice: voice + tail,
+    moreAvailable: job.moreAvailable,
+    provenance: provenanceOf(ctx, top[0]?.airline.iata ?? "", job.liveMode, false),
+    voice,
   };
+}
+
+/**
+ * Starts the search (or joins the one already running or finished for the same trip and family), waits up to the budget,
+ * and answers with the best ranked offers that are ready. A search that is still reading seat maps says so, and a repeat
+ * of the same call returns the same search with more of it done.
+ */
+export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<OffersView> {
+  const family = requireFamily(ctx);
+  duffelOrThrow(ctx);
+  const key = searchKey(input, family);
+  let job = ctx.searches.get(key);
+  if (job?.status === "failed") {
+    ctx.searches.delete(key);
+    throw job.error!;
+  }
+  if (!job || !reusable(ctx, job)) job = startSearch(ctx, input, family, key);
+  await within(job.done, ctx.budgetMs);
+  if (job.status === "failed") {
+    ctx.searches.delete(key);
+    throw job.error!;
+  }
+  return offersView(ctx, job, family);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
