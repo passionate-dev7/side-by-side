@@ -40,7 +40,7 @@ Eight entries from building an Alexa+ MCP add-on, a client for it, and an Amazon
 - Task: use a Claude model on Bedrock as the tool-choosing model in the Echo Show client (Converse API, default id `us.anthropic.claude-haiku-4-5-20251001-v1:0`), and in a sibling entry as a judge (`anthropic.claude-3-haiku-20240307-v1:0`).
 - Steps: call Converse from `@aws-sdk/client-bedrock-runtime` in `us-east-1` with the account's credentials.
 - Expected: the Anthropic model answers.
-- Actual: every Anthropic model id we tried was refused for the account. The sibling entry's probe through the real SDK returned `ResourceNotFoundException`, and the Ring entry's ledger records "Anthropic models not available on this account" for the same credentials.
+- Actual: every Anthropic model id we tried was refused for the account. The sibling entry's probe through the real SDK returned `ResourceNotFoundException`, and the Ring entry's ledger records the same refusal of Anthropic models for these credentials.
 - Severity: High for an AWS Builder entry. The most common Bedrock model family is the one that is unavailable, and the error does not say how to enable it.
 - Workaround: switched the default to the mantle endpoint with `openai.gpt-oss-120b` (entry 6). The Converse provider stays in `sim/server/llm.ts` for accounts that have an Anthropic model.
 - Suggestion: have the error name the missing step (model access request, use-case form, or regional availability) and link to it, and add a `list-usable-models` call that returns only what the calling identity can invoke.
