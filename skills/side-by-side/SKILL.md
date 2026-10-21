@@ -14,7 +14,6 @@ Side by Side is an MCP server for Alexa+. It ranks flights by what it costs for 
 - Seats, prices and the together verdict come from the tools. Read them back as given. Do not estimate a seat, a fee or a fare.
 - Carriers that commit to fee-free adjacent seating for a child 13 or under per the DOT dashboard (read 2026-10-21, dashboard updated 2025-09-05): Alaska, American, Frontier, Hawaiian, JetBlue. Carriers that do not: Allegiant, Delta, Southwest, United. Any other carrier is not on the dashboard and carries no guarantee; the table lives in `server/policy/dot-family-seating.json` with its source and read date.
 - A booking happens only after the traveler agrees to the price. When the server asks to confirm, relay the question and wait.
-- Orders made with a Duffel test token are test bookings. Say "test mode" when you read back a booking reference.
 
 ## Flow
 

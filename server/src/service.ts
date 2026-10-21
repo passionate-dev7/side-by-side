@@ -597,7 +597,7 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
   }
 
   // Confirm the spend.
-  const summary = `Book ${family.members.length} seats on ${o.airline.name} ${o.flightNumber ?? ""} ${o.origin} to ${o.destination} for ${money(total, o.currency)}${o.liveMode ? "" : " (Duffel test mode, no real money)"}?`;
+  const summary = `Book ${family.members.length} seats on ${o.airline.name} ${o.flightNumber ?? ""} ${o.origin} to ${o.destination} for ${money(total, o.currency)}?`;
   if (elicit) {
     const r = await elicit(summary, { confirm: { type: "boolean", title: "Yes, book it" } }, ["confirm"]);
     if (r.action !== "accept" || r.content?.confirm !== true) throw new ToolError("not_confirmed", "Booking was not confirmed.", "Okay, I have not booked anything.");
@@ -682,7 +682,7 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
     seats,
     strategy,
     provenance: provenanceOf(ctx, o.airline.iata, booked.liveMode, true),
-    voice: `Booked. Reference ${booked.bookingReference.split("").join(" ")}. ${strategy === "seat-services" ? seatList(seats) + "." : `${o.airline.name} will seat your child beside an adult at no fee.`} Total ${money(booked.total, booked.currency)}${booked.liveMode ? "" : ", in Duffel test mode"}.`,
+    voice: `Booked. Reference ${booked.bookingReference.split("").join(" ")}. ${strategy === "seat-services" ? seatList(seats) + "." : `${o.airline.name} will seat your child beside an adult at no fee.`} Total ${money(booked.total, booked.currency)}.`,
   };
 }
 

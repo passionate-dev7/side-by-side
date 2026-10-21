@@ -6,3 +6,4 @@ server/ui-dist
 !.env.example
 *.log
 data
+.progress/

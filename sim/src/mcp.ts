@@ -150,7 +150,7 @@ export async function connectMcp(url: string, handlers: McpHandlers): Promise<Mc
   const transport = new WireTransport(endpoint);
   transport.onToolResult = handlers.onToolResult;
   const client = new Client(
-    { name: "Alexa+ Simulator (Side by Side)", version: "0.1.0" },
+    { name: "Side by Side on Echo Show", version: "0.1.0" },
     { capabilities: { elicitation: {}, extensions: { [MCP_APPS_EXTENSION]: { mimeTypes: [MCP_APPS_MIME] } } } },
   );
   client.setRequestHandler(ElicitRequestSchema, (req) => handlers.onElicit(req.params));

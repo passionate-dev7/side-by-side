@@ -1,7 +1,7 @@
 import type { Cell, FareComparison, NoAdjacentSeats, SeatMapView, Traveler } from "../../domain.js";
 import { h, reducedMotion } from "./dom.js";
 import { clock, money, seatLetter } from "./format.js";
-import { provenanceStrip, sourceTag } from "./provenance.js";
+import { sourceLine } from "./provenance.js";
 import { chip, head, screen, type Ctx } from "./screens.js";
 
 type SeatCell = Extract<Cell, { kind: "seat" }>;
@@ -65,7 +65,7 @@ export class SeatMapScreen {
       ? h("div", { class: "map" }, this.cabinEl, this.panel())
       : h("div", { class: "map" }, h("p", { class: "nomap" }, "No seat map came back for this flight."), this.panel());
     this.el.replaceChildren(
-      head(`${v.route.origin} to ${v.route.destination}`, [h("span", { class: "sub" }, sub), sourceTag(v.provenance)]),
+      head(`${v.route.origin} to ${v.route.destination}`, [h("span", { class: "sub" }, sub)]),
       body,
       this.foot(),
     );
@@ -217,7 +217,7 @@ export class SeatMapScreen {
       ),
       book,
       ),
-      provenanceStrip(v.provenance),
+      sourceLine(v.provenance),
     );
   }
 

@@ -64,8 +64,8 @@ Spacing: 2, 6, 8, 12, 16, 20, 24 (Amazon). Screen padding 24. Radii: 4, 8, 12, 1
 - Name chip: `--accent` fill for adults, `--ok` outline plus a small-size glyph for children, so children read differently without colour alone. Draggable (pointer events), tappable (select, then tap a seat).
 - Verdict chip: `--ok` "Together" or `--warn` "Not together", with the violation sentence beside it.
 - Primary button: `--accent` fill, 56px tall, 12px radius, one per screen.
-- Test mode tag: outlined `--warn`, always visible when `testMode` is true.
-- Device frame (simulator only): restrained bezel, the device being simulated, no fake browser chrome.
+- Source line: one muted line at the foot of every screen naming the airline seat maps and the DOT dashboard edition the rule comes from.
+- Device frame: restrained bezel around the 768x480 canvas, no fake browser chrome.
 
 ## Motion
 

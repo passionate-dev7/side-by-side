@@ -1,7 +1,7 @@
 import type { BookedView, ErrorView, FamilyView, OfferCard, OffersView, StatusView } from "../../domain.js";
 import { h, type Child } from "./dom.js";
 import { checkedAt, clock, day, money, partyLine, stops } from "./format.js";
-import { provenanceStrip, sourceTag } from "./provenance.js";
+import { sourceLine } from "./provenance.js";
 
 export interface Ctx {
   /** Calls a server tool, presents its result, and resolves false (after showing a toast) when it failed. */
@@ -60,9 +60,9 @@ export function offersScreen(v: OffersView, ctx: Ctx): HTMLElement {
   const sub = [day(v.route.departureDate), partyLine(v.party)].filter(Boolean).join(" · ");
   return screen(
     "offers",
-    head(`${v.route.origin} to ${v.route.destination}`, [h("span", { class: "sub" }, sub), sourceTag(v.provenance)]),
+    head(`${v.route.origin} to ${v.route.destination}`, [h("span", { class: "sub" }, sub)]),
     h("section", { class: "offers", "aria-label": "Flights ranked by cost to sit together" }, ...v.offers.map((o) => offerRow(o, v, ctx))),
-    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, evaluatedLine(v)), provenanceStrip(v.provenance)),
+    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, evaluatedLine(v)), sourceLine(v.provenance)),
   );
 }
 
@@ -75,14 +75,14 @@ export function bookedScreen(v: BookedView): HTMLElement {
   const strategy = v.strategy === "seat-services" ? "Seats are booked for everyone." : "No seat fee. The airline seats the family together.";
   return screen(
     "booked",
-    head("Booked", [sourceTag(v.provenance)]),
+    head("Booked"),
     h(
       "section",
       { class: "split" },
       h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, flight), h("div", { class: "big" }, `Total ${money(v.total, v.currency)}`)),
       h("ul", { class: "who", "aria-label": "Seats by traveler" }, ...v.seats.map((s) => seatItem(s.name, s.seat))),
     ),
-    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, strategy), provenanceStrip(v.provenance)),
+    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, strategy), sourceLine(v.provenance)),
   );
 }
 
@@ -125,9 +125,9 @@ export function statusScreen(v: StatusView): HTMLElement {
     : h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, v.changes.length ? "Seat changes since you booked" : "No seat changes since you booked"));
   return screen(
     "together-status",
-    head(statusTitle(v), [v.together ? chip("ok", "Together", true) : chip("warn", "Not together", true), sourceTag(v.provenance)]),
+    head(statusTitle(v), [v.together ? chip("ok", "Together", true) : chip("warn", "Not together", true)]),
     h("section", { class: "split" }, left, h("ul", { class: "who", "aria-label": v.changes.length ? "Seats, with changes" : "Seats by traveler" }, ...rows)),
-    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, reseatLine(v)), provenanceStrip(v.provenance)),
+    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, reseatLine(v)), sourceLine(v.provenance)),
   );
 }
 

@@ -61,7 +61,7 @@ export class ViewHost {
     this.iframe.height = "480";
     this.bridge = new AppBridge(
       backend.client,
-      { name: "Alexa+ Simulator (Side by Side)", version: "0.1.0" },
+      { name: "Side by Side on Echo Show", version: "0.1.0" },
       { openLinks: {}, serverTools: {}, serverResources: {}, logging: {}, message: { text: {} } },
       { hostContext: context },
     );

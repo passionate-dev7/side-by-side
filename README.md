@@ -12,7 +12,7 @@ An Alexa+ add-on for families flying together. A parent says "find us flights to
 | `server/src/tools/` | Six tools: `save_family`, `find_family_flights`, `show_seats`, `move_traveler`, `book_together`, `still_together` |
 | `server/src/ui/side-by-side/` | The MCP Apps view (`ui://side-by-side/seats.html`), 768x480 |
 | `server/src/lint/` | Tool description lint for poisoned-description patterns |
-| `sim/` | Alexa+ simulator (it plays the Alexa+ host, it is not Alexa+): a real MCP client with the MCP Apps host bridge, Web Speech voice, an LLM tool-choosing loop, and a wire panel showing the MCP handshake (protocol version, tools/list) and every tools/call with its latency in ms |
+| `sim/` | Side by Side on Echo Show: a real MCP client with the MCP Apps host bridge, Web Speech voice, an LLM tool-choosing loop, and a wire panel showing the MCP handshake (protocol version, tools/list) and every tools/call with its latency in ms |
 | `skills/side-by-side/SKILL.md` | Agent Skill: voice rules, tool routing, seating policy |
 | `spikes/seats/` | Measurement script for the together-price and latency numbers |
 
@@ -26,21 +26,21 @@ npm install
 # 1. The MCP server. Put a Duffel test token (duffel_test_...) in DUFFEL_ACCESS_TOKEN first.
 npm run start -w server        # http://127.0.0.1:8790/mcp, health at /health
 
-# 2. The Alexa+ simulator (needs one LLM credential in the environment, see below)
+# 2. Side by Side on Echo Show (needs one LLM credential in the environment, see below)
 npm run dev -w sim             # http://127.0.0.1:5173
 ```
 
-`npm run fixture -w server` serves the same tools over the same transport on the same port, backed by an in-memory Duffel emulator that enforces Duffel's order rules (payment equals fare plus seat services, services exist and are unused, expired offers are refused). Every card it produces is labeled `TEST` and `fixture`. The simulator shows an emulator control next to the device when it is connected to it, so the emulated airline can move a child's seat after booking.
+`npm run fixture -w server` serves the same tools over the same transport on the same port, backed by an in-memory Duffel service that enforces Duffel's order rules (payment equals fare plus seat services, services exist and are unused, expired offers are refused). It is the quickest way to run the whole journey. Next to the device, Demo day controls let the airline move a child after booking.
 
 ## A short scripted flow
 
-A short flow against the fixture server, by voice or typing in the simulator:
+The whole journey, by voice or typing, against the fixture server:
 
 1. `save_family`: Dad 40, Mum 38, Mia 6, Leo 9.
-2. `find_family_flights` JFK to MCO: the list says how many fares had their seat maps read, and every card carries Offer, Seats, Rule and Booking labels (`LIVE` or `TEST`).
+2. `find_family_flights` JFK to MCO: the list says how many fares had their seat maps read, and every flight card shows its base fare, each seat fee, the DOT fee waiver with its reason, and the family total.
 3. `show_seats` on JetBlue: Delta has the lowest fare ($760) and costs $850 for the family to sit together; JetBlue is $812 fare and $0 in seat fees under the DOT commitment, $812 for the family. The seat map shows both side by side.
 4. `show_seats` on United: no two open seats are side by side, so the screen says so and offers the flights that work.
-5. `book_together`, then the emulator control moves Mia to 30F, then `still_together`: the view names Mia, her old and new seat, and proposes seats that put her beside an adult again.
+5. `book_together`, then Demo day moves Mia to 30F, then `still_together`: the view names Mia, her old and new seat, and proposes seats that put her beside an adult again.
 
 The wire panel lists `initialize` with the negotiated protocol version, `tools/list`, and each `tools/call` with its latency in ms.
 
@@ -60,6 +60,6 @@ npx tsx spikes/seats/spike.ts     # prints the together-price table and latency 
 - Together-price: fare plus the cheapest seat fees that put every child beside an adult on the flight's live seat map, or no seat fees where the carrier is on the DOT fee-free list and adjacent seats exist. A carrier that is not on the DOT list pays every seat fee.
 - Evaluated: the search reads the seat map of up to the 10 cheapest direct fares. The list states how many were evaluated and whether more exist.
 - The seating answer is computed by `solver.ts` from the Duffel seat map. The model only chooses which tool to call.
-- Every card labels its offer, seat map, DOT rule and booking `LIVE` or `TEST` from the Duffel mode of the data (a `duffel_test_` token gives `TEST`), and names the source: Duffel, or the fixture emulator.
+- Every flight card breaks its family total into base fare, each seat fee and the DOT waiver, and gives the waiver's reason in the words of the dashboard's conditions.
 - A child is never booked without an adult beside them. When the open seats cannot do that, the answer is "no adjacent seats on this flight" with the flights of the same search that can.
 - Spoken replies are stripped of markdown in code before they are captioned or spoken.

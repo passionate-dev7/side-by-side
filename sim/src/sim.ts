@@ -242,7 +242,7 @@ class Sim {
       platform: "web",
       locale: "en-US",
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      userAgent: "Alexa+ Simulator (web)",
+      userAgent: "Side by Side on Echo Show (web)",
       deviceCapabilities: { touch: true, hover: false },
       ...(tool ? { toolInfo: { tool } } : {}),
     };

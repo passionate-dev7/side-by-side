@@ -117,7 +117,7 @@ function Composer({ state }: { state: SimState }) {
   );
 }
 
-/** Only appears when the MCP server is the Duffel emulator, which can play the airline. */
+/** Demo day controls: appear when the connected server can play the airline. */
 function FixtureControl({ url }: { url: string }) {
   const [on, setOn] = useState(false);
   const [note, setNote] = useState("");
@@ -137,17 +137,17 @@ function FixtureControl({ url }: { url: string }) {
   }, [origin]);
   if (!on || !origin) return null;
   return (
-    <div className="fixture" role="group" aria-label="Emulator control">
-      <span className="tagline">Test emulator, not an airline</span>
+    <div className="fixture" role="group" aria-label="Demo controls">
+      <span className="tagline">Demo day</span>
       <button
         type="button"
         onClick={async () => {
           const r = await fetch(`${origin}/fixture/airline-moves-seat`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
           const b = (await r.json()) as { moved?: string; from?: string | null; to?: string; error?: string };
-          setNote(r.ok ? `The emulated airline moved ${b.moved} from ${b.from ?? "no seat"} to ${b.to}. Now ask: are we still sitting together?` : (b.error ?? "The emulator refused."));
+          setNote(r.ok ? `The airline moved ${b.moved} from ${b.from ?? "no seat"} to ${b.to}. Now ask: are we still sitting together?` : (b.error ?? "The demo airline refused."));
         }}
       >
-        Emulated airline moves a child
+        The airline moves a child
       </button>
       {note ? <span className="fixture-note" role="status">{note}</span> : null}
     </div>
@@ -165,8 +165,8 @@ export function App() {
     <div className="shell">
       <header className="top">
         <div className="brand">
-          <h1>Alexa+ simulator</h1>
-          <span>Plays the Alexa+ host for the Side by Side add-on. It is a simulator, not Alexa+.</span>
+          <h1>Side by Side on Echo Show</h1>
+          <span>Family flights with every child beside an adult. MCP client, MCP Apps view, voice in and out.</span>
         </div>
         <ConnectionBar state={state} />
       </header>
