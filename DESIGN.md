@@ -63,6 +63,7 @@ Spacing: 2, 6, 8, 12, 16, 20, 24 (Amazon). Screen padding 24. Radii: 4, 8, 12, 1
 - Seat (free): `--surface-2` fill, `--rule` border. Seat (taken): hatched `--surface-2`, no pointer. Seat (mine): holds the name chip.
 - Name chip: `--accent` fill for adults, `--ok` outline plus a small-size glyph for children, so children read differently without colour alone. Draggable (pointer events), tappable (select, then tap a seat).
 - Verdict chip: `--ok` "Together" or `--warn` "Not together", with the violation sentence beside it.
+- Flight card: airline and times, then the sum in one line (fare, each seat fee, what the DOT waiver took off), then the waiver verdict with its reason; the family total sits right at 32px and the card's rank under it. Colour goes on the winning card and its waiver word only.
 - Primary button: `--accent` fill, 56px tall, 12px radius, one per screen.
 - Source line: one muted line at the foot of every screen naming the airline seat maps and the DOT dashboard edition the rule comes from.
 - Device frame: restrained bezel around the 768x480 canvas, no fake browser chrome.

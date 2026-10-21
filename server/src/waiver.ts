@@ -39,11 +39,11 @@ export function evaluateWaiver(i: WaiverInput): DotWaiver {
   if (listed === null) {
     code = "carrier_not_listed";
     reason = `${i.airlineName} is not on the DOT family seating dashboard, so no fee waiver is assumed.`;
-    summary = "Not on the DOT dashboard, so no waiver is assumed";
+    summary = "Not on the DOT dashboard";
   } else if (listed === false) {
     code = "carrier_no_commitment";
     reason = `${dotCarrierName(i.iata) ?? i.airlineName} does not commit to fee-free family seating on the DOT dashboard.`;
-    summary = `${dotCarrierName(i.iata) ?? i.airlineName} does not commit to fee-free family seating`;
+    summary = `${dotCarrierName(i.iata) ?? i.airlineName} does not commit to fee-free seating`;
   } else if (youngChildren === 0) {
     code = "no_young_child";
     reason = `Nobody is ${DOT_CHILD_MAX_AGE} or under, so the DOT commitment has no child to cover.`;
@@ -59,7 +59,7 @@ export function evaluateWaiver(i: WaiverInput): DotWaiver {
   } else {
     code = "applies";
     reason = `${dotCarrierName(i.iata) ?? i.airlineName} commits to fee-free adjacent seats for a child ${DOT_CHILD_MAX_AGE} or under, all fare types. One reservation, seats open in ${cabin}.`;
-    summary = `${dotCarrierName(i.iata) ?? i.airlineName} commits to fee-free seats for a child ${DOT_CHILD_MAX_AGE} or under, all fares`;
+    summary = `${dotCarrierName(i.iata) ?? i.airlineName} commits to it for a child ${DOT_CHILD_MAX_AGE} or under`;
   }
 
   const met = (id: DotConditionId): boolean | null => {

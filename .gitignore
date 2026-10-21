@@ -7,3 +7,4 @@ server/ui-dist
 *.log
 data
 .progress/
+.taste-skill/

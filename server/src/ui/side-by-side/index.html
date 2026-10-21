@@ -76,6 +76,7 @@ button:disabled { cursor: not-allowed; }
 .chip.ok { color: var(--ok); border-color: var(--ok); }
 .chip.warn { color: var(--warn); border-color: var(--warn); }
 .chip.accent { color: var(--accent); border-color: var(--accent); }
+.chip.muted { color: var(--muted); border-color: var(--rule); font-weight: 500; }
 .chip i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
 .chip.warn i { border-radius: 2px; transform: rotate(45deg); }
 
@@ -88,7 +89,7 @@ button:disabled { cursor: not-allowed; }
 /* offers */
 .offers { display: grid; align-content: start; gap: var(--sp-2); overflow-y: auto; scrollbar-width: none; min-height: 0; padding: 3px; margin: -3px; }
 .offers::-webkit-scrollbar { display: none; }
-.offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto; column-gap: var(--sp-5); row-gap: 0; align-items: baseline; padding: 4px var(--sp-5);
+.offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto; column-gap: var(--sp-5); row-gap: 0; align-items: baseline; padding: 6px var(--sp-5);
   background: var(--surface-2); border: 1px solid var(--rule); border-radius: var(--r-3); width: 100%; flex: none; text-align: left;
   transition: transform var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out); }
 .offer:first-child { background: var(--surface-3); border-color: var(--accent); }
@@ -121,7 +122,7 @@ button:disabled { cursor: not-allowed; }
 .seat.is-free { background: var(--surface-2); border: 2px solid var(--rule); color: var(--ink); transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
 .seat.is-free:active { transform: scale(0.97); }
 .seat .fee { font-size: 14px; font-weight: 500; color: var(--muted); line-height: 1; }
-.seat.is-taken { border: 2px solid var(--surface-3); color: var(--muted); background: repeating-linear-gradient(135deg, var(--surface-2) 0 4px, var(--surface-3) 4px 8px); opacity: 0.8; }
+.seat.is-taken { border: 2px solid var(--surface-3); color: var(--muted); background: repeating-linear-gradient(135deg, var(--surface-2) 0 4px, var(--surface-3) 4px 8px); opacity: 0.5; }
 .seat.is-taken span { opacity: 0; }
 .seat.is-mine { background: var(--surface-2); border: 2px dashed var(--rule); }
 .cabin[data-armed] .seat.is-free { border-color: var(--accent); }
@@ -169,10 +170,11 @@ button:disabled { cursor: not-allowed; }
 .reason.small { font-size: var(--fs-label); color: var(--muted); }
 .none-fit { justify-content: flex-start; }
 .alts { display: grid; gap: var(--sp-3); }
-.alt { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-4); min-height: 56px; padding: 0 var(--sp-4); background: var(--surface-2); border: 2px solid var(--accent); border-radius: var(--r-3); }
+.alt { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-5); min-height: 56px; padding: 0 var(--sp-4); background: var(--surface-2); border: 2px solid var(--rule); border-radius: var(--r-3); }
+.alt:first-child { border-color: var(--accent); }
 .alt .who { display: grid; min-width: 0; line-height: 1.1; }
 .alt .who b { font-size: var(--fs-label); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.alt .who i { font-style: normal; font-size: var(--fs-note); color: var(--muted); white-space: nowrap; }
+.alt .who i { font-style: normal; font-size: 16px; color: var(--muted); white-space: nowrap; }
 .alt .n { font-size: var(--fs-lead); font-weight: 600; }
 .alt[aria-busy="true"] { opacity: 0.6; }
 @media (hover: hover) { .alt:hover { background: var(--surface-3); } }
@@ -182,7 +184,7 @@ button:disabled { cursor: not-allowed; }
 .cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) 60px 66px; gap: var(--sp-3); align-items: center; font-size: var(--fs-note); min-width: 0; }
 .cmp-head { font-size: 14px; color: var(--muted); }
 .cmp-head span:not(:first-child) { text-align: right; }
-.cmp-head span:first-child { color: var(--warn); font-weight: 600; white-space: nowrap; }
+.cmp-note { font-size: var(--fs-note); color: var(--warn); font-weight: 600; line-height: 1.15; }
 .cmp-row .who { display: grid; min-width: 0; line-height: 1.1; }
 .cmp-row .who b { font-size: var(--fs-label); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmp-row .who i { font-style: normal; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -194,6 +196,7 @@ button:disabled { cursor: not-allowed; }
 /* provenance */
 .foot-prov, .foot-stack { display: grid; gap: var(--sp-2); }
 .evaluated { font-size: var(--fs-label); color: var(--muted); line-height: 1.2; }
+.evaluated b { color: var(--ink); font-weight: 600; }
 .prov { font-size: var(--fs-note); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* booked, status */
@@ -205,10 +208,15 @@ button:disabled { cursor: not-allowed; }
 .who { list-style: none; padding: 0; display: grid; align-content: center; }
 .who li { display: flex; justify-content: space-between; gap: var(--sp-5); align-items: baseline; padding: var(--sp-3) 0; border-bottom: 1px solid var(--rule); font-size: var(--fs-lead); }
 .who li:last-child { border-bottom: 0; }
+.who .seatno, .who .change b, .flag-seat b { font-variant-numeric: proportional-nums lining-nums; }
 .who .seatno { font-weight: 600; letter-spacing: 0.02em; }
 .who .seatno.none { font-weight: 400; color: var(--muted); font-size: var(--fs-body); }
 .who .change { color: var(--muted); font-size: var(--fs-body); }
 .who .change b { color: var(--ink); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.chips .trav { background: var(--surface-3); color: var(--ink); width: auto; height: 44px; padding: 0 var(--sp-5); font-size: var(--fs-label); cursor: default; touch-action: auto; }
+.seated .big { line-height: 1.25; }
+.big b.yes { color: var(--accent); font-weight: 600; font-size: var(--fs-title); }
 .who li.bad { color: var(--warn); }
 .who li.bad .change b { color: var(--warn); }
 .flag-row { display: flex; align-items: center; gap: var(--sp-5); }

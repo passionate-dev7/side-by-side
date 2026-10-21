@@ -129,7 +129,7 @@ export class SeatMapScreen {
         { class: "verdict", role: "status" },
         v.together === "TOGETHER" ? chip("ok", "Sitting together", true) : chip("warn", "Not together", true),
         ...reasons.slice(0, 2).map((r) => h("p", { class: "reason" }, r)),
-        h("p", { class: "why", title: v.waiver.reason }, h("b", { class: v.waiver.applies ? "yes" : "" }, v.waiver.applies ? "DOT fee waiver" : "No DOT waiver"), ` ${v.waiver.summary}`),
+        h("p", { class: "why", title: v.waiver.reason }, h("b", { class: v.waiver.applies ? "yes" : "" }, v.waiver.applies ? "DOT waiver" : "No DOT waiver"), ` ${v.waiver.summary}`),
       ),
       v.comparison ? this.compare(v.comparison) : null,
       sel ? h("p", { class: "hint live" }, `Tap a seat for ${sel.name}.`) : v.comparison ? null : h("p", { class: "hint" }, "Drag a name to a seat."),
@@ -175,7 +175,8 @@ export class SeatMapScreen {
     return h(
       "section",
       { class: `cmp${c.cheapestFareLoses ? " loses" : ""}`, "aria-label": "Fare compared with family total" },
-      h("div", { class: "cmp-row cmp-head" }, h("span", {}, c.cheapestFareLoses ? "Lowest fare is not lowest total" : ""), h("span", {}, "Fare"), h("span", {}, "Family")),
+      c.cheapestFareLoses ? h("div", { class: "cmp-note" }, "The lowest fare is not the lowest total") : null,
+      h("div", { class: "cmp-row cmp-head" }, h("span", {}), h("span", {}, "Fare"), h("span", {}, "Family")),
       ...c.rows.map((r) =>
         h(
           "div",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OfferCard } from "../src/domain.js";
-import { breakdown, checkedLabel } from "../src/ui/side-by-side/audit.js";
+import { breakdown, checkedLabel, rankNote } from "../src/ui/side-by-side/audit.js";
 
 const waiver = (applies: boolean) => ({ applies, code: applies ? "applies" : "carrier_no_commitment", reason: "", summary: "", conditions: [] }) as OfferCard["waiver"];
 const card = (over: Partial<OfferCard>): OfferCard => ({
@@ -18,6 +18,12 @@ describe("flight card arithmetic text", () => {
   });
   it("a card that cannot seat the family shows the fare and no seat fee", () => {
     expect(breakdown(card({ together: "NOT_TOGETHER", togetherTotal: null }), "USD")).toBe("Fare $812");
+  });
+  it("the lowest fare is named as such, and the rank is against the lowest family total", () => {
+    expect(breakdown(card({ fare: 760, seatFees: 90, seatLines: [{ traveler: "Mum", seat: "22D", fee: 45 }, { traveler: "Leo", seat: "22E", fee: 45 }] }), "USD", true)).toBe("Lowest fare $760 + seats $90 (22D $45, 22E $45)");
+    expect(rankNote(card({ togetherTotal: 812 }), 812, "USD")).toBe("Lowest family total");
+    expect(rankNote(card({ togetherTotal: 850 }), 812, "USD")).toBe("+$38 over the lowest total");
+    expect(rankNote(card({ together: "NOT_TOGETHER", togetherTotal: null }), 812, "USD")).toBe("Not together");
   });
   it("says how many fares were checked, with a plus when more exist", () => {
     expect(checkedLabel({ evaluated: 10, searched: 23, moreAvailable: false })).toBe("10 of 23 fares checked");

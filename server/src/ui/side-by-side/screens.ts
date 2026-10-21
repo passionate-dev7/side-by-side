@@ -1,7 +1,7 @@
 import type { BookedView, ErrorView, FamilyView, OfferCard, OffersView, StatusView } from "../../domain.js";
 import { h, type Child } from "./dom.js";
 import { checkedAt, clock, day, money, partyLine, stops } from "./format.js";
-import { breakdown, checkedLabel } from "./audit.js";
+import { breakdown, checkedLabel, rankNote } from "./audit.js";
 import { sourceLine } from "./provenance.js";
 
 export interface Ctx {
@@ -19,26 +19,23 @@ export function head(title: string, side: Child[] = [], hero = false, subline?: 
   return h("header", { class: "head" }, subline ? h("div", { class: "head-main" }, h1, h("p", { class: "subline" }, subline)) : h1, h("div", { class: "head-side" }, ...side));
 }
 
-export function chip(tone: "ok" | "warn" | "accent", text: string, dot = false): HTMLElement {
+export function chip(tone: "ok" | "warn" | "accent" | "muted", text: string, dot = false): HTMLElement {
   return h("span", { class: `chip ${tone}` }, dot ? h("i") : null, text);
 }
 
 function offerRow(o: OfferCard, v: OffersView, ctx: Ctx): HTMLElement {
   const meta = `${clock(o.departingAt)} to ${clock(o.arrivingAt)} · ${stops(o.stops)}`;
   const priced = o.togetherTotal !== null;
-  const delta =
-    !priced ? "Not together"
-    : o.deltaVsCheapestFare === null ? ""
-    : o.deltaVsCheapestFare <= 0 ? "Lowest fare and lowest total"
-    : `+${money(o.deltaVsCheapestFare, v.currency)} over the lowest fare`;
+  const lowestFare = o.fare === Math.min(...v.offers.map((x) => x.fare));
+  const delta = rankNote(o, v.offers.find((x) => x.togetherTotal !== null)?.togetherTotal ?? null, v.currency);
   const btn = h(
     "button",
     { class: `offer${priced ? "" : " is-apart"}`, type: "button", "data-offer": o.offerId },
     h("div", { class: "o-id" }, h("span", { class: "airline" }, o.airline.name), h("span", { class: "times" }, meta)),
     h("div", { class: "total" }, money(priced ? (o.togetherTotal as number) : o.fare, v.currency)),
-    h("div", { class: "o-sum" }, breakdown(o, v.currency)),
+    h("div", { class: "o-sum" }, breakdown(o, v.currency, lowestFare && v.offers.length > 1)),
     h("div", { class: "delta" }, delta),
-    h("div", { class: `o-why${o.waiver.applies ? " yes" : ""}` }, h("b", {}, o.waiver.applies ? "DOT fee waiver" : "No DOT waiver"), ` ${o.waiver.summary}`),
+    h("div", { class: `o-why${o.waiver.applies ? " yes" : ""}` }, h("b", {}, o.waiver.applies ? "DOT waiver" : "No DOT waiver"), ` ${o.waiver.summary}`),
   );
   btn.addEventListener("click", async () => {
     if (btn.getAttribute("aria-busy") === "true") return;
@@ -50,10 +47,10 @@ function offerRow(o: OfferCard, v: OffersView, ctx: Ctx): HTMLElement {
 }
 
 export function offersScreen(v: OffersView, ctx: Ctx): HTMLElement {
-  const sub = [day(v.route.departureDate), partyLine(v.party)].filter(Boolean).join(" · ");
+  const sub = [day(v.route.departureDate).replace(/^\w+, /, ""), partyLine(v.party)].filter(Boolean).join(" · ");
   return screen(
     "offers",
-    head(`${v.route.origin} to ${v.route.destination}`, [chip("accent", checkedLabel(v))], false, sub),
+    head(`${v.route.origin} to ${v.route.destination}`, [chip("muted", checkedLabel(v))], false, sub),
     h("section", { class: "offers", "aria-label": "Flights ranked by cost to sit together" }, ...v.offers.map((o) => offerRow(o, v, ctx))),
     h("footer", { class: "foot-prov" }, sourceLine(v.provenance)),
   );
@@ -64,18 +61,22 @@ function seatItem(name: string, seat: string | null, trailing?: Child): HTMLElem
 }
 
 export function bookedScreen(v: BookedView): HTMLElement {
-  const flight = `${v.airline.name} · ${v.route.origin} to ${v.route.destination} · ${day(v.route.departingAt)}, ${clock(v.route.departingAt)}`;
-  const strategy = v.strategy === "seat-services" ? "Seats are booked for everyone." : "No seat fee. The airline seats the family together.";
+  const flight = `${v.route.origin} to ${v.route.destination} · ${day(v.route.departingAt).replace(/^\w+, /, "")}, ${clock(v.route.departingAt)}`;
+  const waived = v.strategy === "airline-guarantee";
+  const right = waived
+    ? h(
+        "div",
+        { class: "stack seated", "aria-label": "Travelers" },
+        h("div", { class: "chips" }, ...v.seats.map((s) => h("span", { class: "trav" }, h("span", { class: "nm" }, s.name)))),
+        h("div", { class: "label" }, "Seat fees"),
+        h("div", { class: "big" }, h("b", { class: "yes" }, "$0"), ` ${v.airline.name} seats the children beside an adult, by the day before the flight.`),
+      )
+    : h("ul", { class: "who", "aria-label": "Seats by traveler" }, ...v.seats.map((s) => seatItem(s.name, s.seat)));
   return screen(
     "booked",
-    head("Booked"),
-    h(
-      "section",
-      { class: "split" },
-      h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, flight), h("div", { class: "big" }, `Total ${money(v.total, v.currency)}`)),
-      h("ul", { class: "who", "aria-label": "Seats by traveler" }, ...v.seats.map((s) => seatItem(s.name, s.seat))),
-    ),
-    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, strategy), sourceLine(v.provenance)),
+    head(`Booked on ${v.airline.name}`),
+    h("section", { class: "split" }, h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, flight), h("div", { class: "big" }, `Total ${money(v.total, v.currency)}`)), right),
+    h("footer", { class: "foot-prov" }, sourceLine(v.provenance)),
   );
 }
 
@@ -120,7 +121,7 @@ export function statusScreen(v: StatusView): HTMLElement {
     "together-status",
     head(statusTitle(v), [v.together ? chip("ok", "Together", true) : chip("warn", "Not together", true)]),
     h("section", { class: "split" }, left, h("ul", { class: "who", "aria-label": v.changes.length ? "Seats, with changes" : "Seats by traveler" }, ...rows)),
-    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, reseatLine(v)), sourceLine(v.provenance)),
+    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, ...(reseatLine(v).startsWith("Proposed: ") ? [h("b", {}, "Proposed"), reseatLine(v).slice("Proposed".length)] : [reseatLine(v)])), sourceLine(v.provenance)),
   );
 }
 

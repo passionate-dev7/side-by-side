@@ -5,9 +5,9 @@ import { sim, type HostMode, type SimState, type Theme } from "./sim";
 
 const PROMPTS = [
   "We are Dad 40, Mum 38, Mia 6 and Leo 9. Find flights from JFK to MCO on 2026-11-25, kids next to us.",
-  "Show me the seats on the Delta flight.",
-  "Put Dad on the aisle.",
-  "Book it.",
+  "Show me the seats on the JetBlue flight.",
+  "What about United?",
+  "Book the JetBlue one.",
   "Are we still sitting together?",
 ];
 
