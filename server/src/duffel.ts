@@ -72,7 +72,10 @@ export interface OrderDetail {
 }
 
 export interface DuffelPort {
-  searchOffers(req: SearchRequest): Promise<{ offers: OfferSummary[]; liveMode: boolean }>;
+  /** "duffel" talks to the Duffel API; "fixture" is the in-memory emulator and is reported as such on every card. */
+  readonly source: "duffel" | "fixture";
+  /** `moreAvailable` is true when Duffel holds more offers than `limit` returned. */
+  searchOffers(req: SearchRequest): Promise<{ offers: OfferSummary[]; liveMode: boolean; moreAvailable: boolean }>;
   /** Empty array when the airline publishes no seat map for this offer. */
   seatMaps(offerId: string): Promise<SeatMap[]>;
   createOrder(input: {
@@ -142,6 +145,7 @@ function seatsOf(order: Order): Record<string, string | null> {
 export function createDuffelPort(token: string, basePath?: string): DuffelPort {
   const duffel = new Duffel({ token, ...(basePath ? { basePath } : {}) });
   return {
+    source: "duffel",
     async searchOffers(req) {
       try {
         const created = await duffel.offerRequests.create({
@@ -156,7 +160,7 @@ export function createDuffelPort(token: string, basePath?: string): DuffelPort {
         const offers = listed.data
           .filter((o) => o.slices.length === 1 && o.slices[0].segments.length === 1)
           .map((o) => summarize(o, passengerIds));
-        return { offers, liveMode: created.data.live_mode };
+        return { offers, liveMode: created.data.live_mode, moreAvailable: Boolean(listed.meta?.after) };
       } catch (e) {
         return wrap(e);
       }

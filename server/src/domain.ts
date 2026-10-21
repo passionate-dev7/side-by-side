@@ -36,6 +36,22 @@ export interface AirlineInfo {
 
 export type TogetherStatus = "TOGETHER" | "NOT_TOGETHER";
 
+export type DataMode = "live" | "test";
+
+/**
+ * Where each fact on a card came from. "duffel" is the Duffel Flights API (mode follows the token: duffel_test_ = test,
+ * duffel_live_ = live). "fixture" is the in-memory emulator used for demos without a token; it is always test and is never an airline.
+ */
+export interface Provenance {
+  source: "duffel" | "fixture";
+  offer: DataMode;
+  seatMap: DataMode;
+  /** The DOT family seating table. `listed` is false when this carrier is not on the dashboard, so no guarantee is assumed. */
+  rule: { listed: boolean; readOn: string; dashboardUpdated: string };
+  /** Mode a booking is made in. `placed` is true once an order exists. */
+  booking: { mode: DataMode; placed: boolean };
+}
+
 export interface OfferCard {
   offerId: string;
   airline: AirlineInfo;
@@ -69,8 +85,13 @@ export interface OffersView {
   route: { origin: string; destination: string; departureDate: string; returnDate: string | null };
   party: Traveler[];
   offers: OfferCard[];
-  /** How many offers were priced for seating before ranking. */
+  /** How many offers the search returned. */
   searched: number;
+  /** How many of those had their seat map read and the seating solved before ranking. */
+  evaluated: number;
+  /** True when the search had more offers than it returned, so the list is the cheapest fares and not every fare. */
+  moreAvailable: boolean;
+  provenance: Provenance;
   voice: string;
 }
 
@@ -91,6 +112,7 @@ export interface SeatMapView {
   seatFees: number;
   guarantee: boolean;
   togetherTotal: number | null;
+  provenance: Provenance;
   voice: string;
 }
 
@@ -106,6 +128,7 @@ export interface BookedView {
   seats: Array<{ name: string; seat: string | null }>;
   /** "seat-services" = seats bought in the order. "airline-guarantee" = no seat fee paid; the carrier seats the family together under the DOT policy. */
   strategy: "seat-services" | "airline-guarantee";
+  provenance: Provenance;
   voice: string;
 }
 
@@ -117,6 +140,7 @@ export interface StatusView {
   seats: Array<{ name: string; seat: string | null }>;
   changes: Array<{ name: string; from: string | null; to: string | null }>;
   checkedAt: string;
+  provenance: Provenance;
   voice: string;
 }
 

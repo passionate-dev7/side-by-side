@@ -6,13 +6,14 @@ import type {
   FamilyView,
   OfferCard,
   OffersView,
+  Provenance,
   SeatMapView,
   StatusView,
   Traveler,
   TogetherStatus,
 } from "./domain.js";
 import { DuffelApiError, type CabinClass, type DuffelPort, type OfferSummary } from "./duffel.js";
-import { dotFeeFreeAdjacent } from "./dot.js";
+import { DOT_SOURCE, dotFeeFreeAdjacent } from "./dot.js";
 import { buildGrid, gridFromLayout, layoutOf, viewRows, type Grid } from "./seatmap.js";
 import { evaluateAssignment, solveSeating, type PartyMember, type Solution } from "./solver.js";
 import type { BookedOrder, Family, FamilyMember, Plan, Store } from "./store.js";
@@ -159,6 +160,17 @@ export function saveFamily(ctx: Ctx, input: SaveFamilyInput): FamilyView {
 const partyFor = (family: Family, passengerIds: string[]): PartyMember[] =>
   family.members.map((m, i) => ({ id: m.id, passengerId: passengerIds[i], age: m.age, ...(m.seatPreference ? { seatPreference: m.seatPreference } : {}) }));
 
+function provenanceOf(ctx: Ctx, iata: string, liveMode: boolean, placed: boolean): Provenance {
+  const mode = liveMode ? "live" : "test";
+  return {
+    source: ctx.duffel?.source ?? "duffel",
+    offer: mode,
+    seatMap: mode,
+    rule: { listed: dotFeeFreeAdjacent(iata) !== null, readOn: DOT_SOURCE.readOn, dashboardUpdated: DOT_SOURCE.dashboardUpdated },
+    booking: { mode, placed },
+  };
+}
+
 function airlineInfo(a: { name: string; iata: string }): AirlineInfo {
   return { name: a.name, iata: a.iata, dotFeeFreeAdjacent: dotFeeFreeAdjacent(a.iata) };
 }
@@ -267,6 +279,9 @@ export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<Off
     party: family.members.map(toTraveler),
     offers: top,
     searched: res.offers.length,
+    evaluated: cards.length,
+    moreAvailable: res.moreAvailable,
+    provenance: provenanceOf(ctx, best.airline.iata, res.liveMode, false),
     voice,
   };
 }
@@ -311,6 +326,7 @@ function buildSeatView(ctx: Ctx, entry: OfferEntry, family: Family, plan: Plan):
     seatFees: payable,
     guarantee,
     togetherTotal: total,
+    provenance: provenanceOf(ctx, o.airline.iata, o.liveMode, false),
     voice,
   };
 }
@@ -558,6 +574,7 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
     total: booked.total,
     seats,
     strategy,
+    provenance: provenanceOf(ctx, o.airline.iata, booked.liveMode, true),
     voice: `Booked. Reference ${booked.bookingReference.split("").join(" ")}. ${strategy === "seat-services" ? seatList(seats) + "." : `${o.airline.name} will seat your child beside an adult at no fee.`} Total ${money(booked.total, booked.currency)}${booked.liveMode ? "" : ", in Duffel test mode"}.`,
   };
 }
@@ -606,6 +623,7 @@ export async function stillTogether(ctx: Ctx, orderId?: string): Promise<StatusV
     seats,
     changes,
     checkedAt: ctx.now().toISOString(),
+    provenance: provenanceOf(ctx, stored.airline.iata, detail.liveMode, true),
     voice,
   };
 }

@@ -7,7 +7,7 @@ import { bookTogether, createCtx, findFamilyFlights, moveTraveler, saveFamily, s
 import { openStore } from "../src/store.js";
 import { buildGrid } from "../src/seatmap.js";
 import { evaluateAssignment } from "../src/solver.js";
-import { FakeDuffel, NOW } from "./fixtures/fake-duffel.js";
+import { FakeDuffel, NOW, SCENARIOS } from "./fixtures/fake-duffel.js";
 
 const FAMILY = {
   travelers: [
@@ -74,6 +74,45 @@ describe("find_family_flights", () => {
     expect(v.voice).toMatch(/JetBlue/);
   });
 
+  it("labels the offer, seat map, DOT rule and booking, and says how many offers were evaluated", async () => {
+    const v = await searched();
+    expect(v.provenance).toEqual({
+      source: "fixture",
+      offer: "test",
+      seatMap: "test",
+      rule: { listed: true, readOn: "2026-10-21", dashboardUpdated: "2025-09-05" },
+      booking: { mode: "test", placed: false },
+    });
+    expect([v.searched, v.evaluated, v.moreAvailable]).toEqual([4, 4, false]);
+  });
+
+  it("evaluated counts only flights whose seat map was read; a flight without one is not ranked", async () => {
+    saveFamily(ctx, FAMILY);
+    fake.noSeatMap.add("off_united");
+    const v = await findFamilyFlights(ctx, SEARCH);
+    expect([v.searched, v.evaluated]).toEqual([4, 3]);
+    expect(v.offers.map((o) => o.airline.iata)).not.toContain("UA");
+    expect(v.voice).not.toMatch(/United/);
+  });
+
+  it("says when more fares exist than were evaluated", async () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ ...SCENARIOS[1], id: `off_many_${i}`, fare: 700 + i }));
+    fake = new FakeDuffel(many);
+    ctx = createCtx({ duffel: fake, store: openStore(":memory:"), now: () => NOW });
+    saveFamily(ctx, FAMILY);
+    const v = await findFamilyFlights(ctx, SEARCH);
+    expect([v.searched, v.evaluated, v.moreAvailable]).toEqual([10, 10, true]);
+  });
+
+  it("the label follows the data's mode, never a constant", async () => {
+    fake.live = true;
+    const v = await searched();
+    expect(v.testMode).toBe(false);
+    expect(v.provenance).toMatchObject({ offer: "live", seatMap: "live", booking: { mode: "live" } });
+    const seats = await showSeats(ctx, "off_delta");
+    expect(seats.provenance).toMatchObject({ offer: "live", seatMap: "live" });
+  });
+
   it("the cheapest fare is not the cheapest way to sit together", async () => {
     const v = await searched();
     const cheapestFare = [...v.offers].sort((a, b) => a.fare - b.fare)[0];
@@ -97,6 +136,7 @@ describe("show_seats and move_traveler", () => {
     await searched();
     const v = await showSeats(ctx, "off_delta");
     expect(v.together).toBe("TOGETHER");
+    expect(v.provenance).toMatchObject({ source: "fixture", offer: "test", seatMap: "test", rule: { listed: true }, booking: { mode: "test", placed: false } });
     expect(v.seatFees).toBe(54);
     expect(v.togetherTotal).toBe(814);
     expect(v.rows).toHaveLength(6);
@@ -171,6 +211,7 @@ describe("book_together", () => {
     expect(v.bookingReference).toBe("FXT4KQ");
     expect(v.total).toBe(812);
     expect(v.testMode).toBe(true);
+    expect(v.provenance).toMatchObject({ source: "fixture", booking: { mode: "test", placed: true } });
     expect(fake.orders.size).toBe(1);
     expect(fake.calls.filter((c) => c.startsWith("getOrder")).length).toBeGreaterThanOrEqual(3);
     expect(ctx.store.getOrder("default", v.orderId)).not.toBeNull();
@@ -279,6 +320,7 @@ describe("still_together (a new session, state read from the store)", () => {
     expect(yes.together).toBe(true);
     expect(yes.changes).toEqual([]);
     expect(yes.voice).toMatch(/^Yes/);
+    expect(yes.provenance).toMatchObject({ source: "fixture", booking: { mode: "test", placed: true } });
 
     const mia = ctx.store.getOrder("default", booked.orderId)!.passengerIds.mia;
     const from = booked.seats.find((s) => s.name === "Mia")!.seat;

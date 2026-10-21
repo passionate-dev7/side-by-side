@@ -14,6 +14,7 @@ interface Seen { method: string; url: string; auth: string | undefined; version:
 const seen: Seen[] = [];
 let http: Server;
 let base: string;
+let listAfter: string | null = null;
 
 const place = (iata: string) => ({ iata_code: iata, name: iata, type: "airport", id: `arp_${iata}` });
 const segment = {
@@ -36,7 +37,7 @@ beforeAll(async () => {
       const send = (status: number, data: unknown) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(data));
       const path = s.url.split("?")[0].replace(/\/$/, "");
       if (path === "/air/offer_requests") return send(201, { data: { id: "orq_1", live_mode: false, passengers: [{ id: "pas_a", type: "adult" }, { id: "pas_b", age: 6 }], slices: [], offers: [] } });
-      if (path === "/air/offers") return send(200, { data: [offer, { ...offer, id: "off_conn", slices: [{ ...offer.slices[0], segments: [segment, { ...segment, id: "seg_2" }] }] }], meta: { limit: 10 } });
+      if (path === "/air/offers") return send(200, { data: [offer, { ...offer, id: "off_conn", slices: [{ ...offer.slices[0], segments: [segment, { ...segment, id: "seg_2" }] }] }], meta: { limit: 10, before: null, after: listAfter } });
       if (path === "/air/seat_maps") {
         if (s.url.includes("off_nomap")) return send(404, { meta: { status: 404, request_id: "r" }, errors: [{ type: "invalid_request_error", title: "Not found", message: "no seat map", code: "not_found" }] });
         return send(200, { data: [makeSeatMap({ rows: 3, layout: [3, 3], passengerIds: ["pas_a", "pas_b"] })] });
@@ -78,6 +79,18 @@ describe("Duffel adapter over the real SDK", () => {
     expect(r.offers.map((o) => o.id)).toEqual(["off_1"]);
     expect(r.offers[0]).toMatchObject({ totalAmount: 812, airline: { iata: "B6" }, flightNumber: "B6101", durationMinutes: 170, passengerIds: ["pas_a", "pas_b"], segmentId: "seg_1", liveMode: false });
     expect(r.liveMode).toBe(false);
+    expect(r.moreAvailable).toBe(false);
+    expect(port().source).toBe("duffel");
+  });
+
+  it("searchOffers reports moreAvailable when Duffel holds a next page of offers", async () => {
+    listAfter = "cursor_next";
+    try {
+      const r = await port().searchOffers({ origin: "JFK", destination: "MCO", departureDate: "2026-11-25", cabin: "economy", passengers: [{ age: 40 }], limit: 10 });
+      expect(r.moreAvailable).toBe(true);
+    } finally {
+      listAfter = null;
+    }
   });
 
   it("seatMaps returns the maps, and an empty list when the airline has none", async () => {

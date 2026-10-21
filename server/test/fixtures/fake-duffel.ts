@@ -90,6 +90,7 @@ export const SCENARIOS: Scenario[] = [
 ];
 
 export class FakeDuffel implements DuffelPort {
+  readonly source = "fixture" as const;
   readonly offers = new Map<string, FakeOffer>();
   readonly orders = new Map<string, FakeOrder>();
   readonly calls: string[] = [];
@@ -97,6 +98,10 @@ export class FakeDuffel implements DuffelPort {
   private seq = 0;
   /** Offers whose expiry has passed. */
   readonly expired = new Set<string>();
+  /** Offers whose airline publishes no seat map. */
+  readonly noSeatMap = new Set<string>();
+  /** Only for testing that labels follow the data's mode. The emulator is never live. */
+  live = false;
   /** Polls before an order shows a booking reference. */
   confirmAfterPolls = 1;
 
@@ -146,18 +151,19 @@ export class FakeDuffel implements DuffelPort {
         segmentId: `seg_${sc.id}`,
         passengerIds: this.requestPassengerIds,
         expiresAt: "2026-10-21T12:30:00Z",
-        liveMode: false,
+        liveMode: this.live,
       };
       this.offers.set(sc.id, { summary, map, services });
       offers.push(summary);
     }
-    return { offers: offers.slice(0, req.limit), liveMode: false };
+    return { offers: offers.slice(0, req.limit), liveMode: this.live, moreAvailable: offers.length > req.limit };
   }
 
   async seatMaps(offerId: string) {
     this.calls.push(`seatMaps:${offerId}`);
     const o = this.offers.get(offerId);
     if (!o) throw new DuffelApiError("not_found", "offer not found", 404);
+    if (this.noSeatMap.has(offerId)) return [];
     // Seats bought by existing orders are gone from the live map.
     const bought = new Set<string>();
     for (const ord of this.orders.values()) if (ord.offerId === offerId) Object.values(ord.seats).forEach((s) => s && bought.add(s));
@@ -222,7 +228,7 @@ export class FakeDuffel implements DuffelPort {
       bookingReference: ord.polls >= ord.confirmAfterPolls ? "FXT4KQ" : null,
       totalAmount: ord.total,
       currency: "USD",
-      liveMode: false,
+      liveMode: this.live,
       airline: o.summary.airline,
       origin: o.summary.origin,
       destination: o.summary.destination,

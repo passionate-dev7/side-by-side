@@ -1,6 +1,7 @@
 import type { BookedView, ErrorView, FamilyView, OfferCard, OffersView, StatusView } from "../../domain.js";
 import { h, type Child } from "./dom.js";
 import { checkedAt, clock, day, money, partyLine, stops } from "./format.js";
+import { provenanceStrip, sourceTag } from "./provenance.js";
 
 export interface Ctx {
   /** Calls a server tool, presents its result, and resolves false (after showing a toast) when it failed. */
@@ -15,8 +16,6 @@ export function screen(kind: string, ...kids: Child[]): HTMLElement {
 export function head(title: string, side: Child[] = [], hero = false): HTMLElement {
   return h("header", { class: "head" }, h("h1", { class: hero ? "title hero" : "title" }, title), h("div", { class: "head-side" }, ...side));
 }
-
-export const testTag = (label = "Test mode") => h("span", { class: "tag" }, label);
 
 export function chip(tone: "ok" | "warn" | "accent", text: string, dot = false): HTMLElement {
   return h("span", { class: `chip ${tone}` }, dot ? h("i") : null, text);
@@ -51,13 +50,19 @@ function offerRow(o: OfferCard, v: OffersView, ctx: Ctx): HTMLElement {
   return btn;
 }
 
+export function evaluatedLine(v: OffersView): string {
+  const n = (k: number) => `${k} direct fare${k === 1 ? "" : "s"}`;
+  const of = v.evaluated === v.searched ? n(v.evaluated) : `${v.evaluated} of ${n(v.searched)}`;
+  return `Seat maps read and seating solved for ${of}${v.moreAvailable ? ", cheapest first. More fares exist." : "."}`;
+}
+
 export function offersScreen(v: OffersView, ctx: Ctx): HTMLElement {
   const sub = [day(v.route.departureDate), partyLine(v.party)].filter(Boolean).join(" · ");
   return screen(
     "offers",
-    head(`${v.route.origin} to ${v.route.destination}`, [h("span", { class: "sub" }, sub), v.testMode ? testTag() : null]),
+    head(`${v.route.origin} to ${v.route.destination}`, [h("span", { class: "sub" }, sub), sourceTag(v.provenance)]),
     h("section", { class: "offers", "aria-label": "Flights ranked by cost to sit together" }, ...v.offers.map((o) => offerRow(o, v, ctx))),
-    v.searched > v.offers.length ? h("footer", { class: "note" }, `Ranked from ${v.searched} flights by what it costs to sit together.`) : h("span"),
+    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, evaluatedLine(v)), provenanceStrip(v.provenance)),
   );
 }
 
@@ -70,14 +75,14 @@ export function bookedScreen(v: BookedView): HTMLElement {
   const strategy = v.strategy === "seat-services" ? "Seats are booked for everyone." : "No seat fee. The airline seats the family together.";
   return screen(
     "booked",
-    head("Booked", [v.testMode ? testTag("Duffel test mode") : null]),
+    head("Booked", [sourceTag(v.provenance)]),
     h(
       "section",
       { class: "split" },
       h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, flight), h("div", { class: "big" }, `Total ${money(v.total, v.currency)}`)),
       h("ul", { class: "who", "aria-label": "Seats by traveler" }, ...v.seats.map((s) => seatItem(s.name, s.seat))),
     ),
-    h("footer", { class: "note" }, strategy),
+    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, strategy), provenanceStrip(v.provenance)),
   );
 }
 
@@ -89,14 +94,14 @@ export function statusScreen(v: StatusView): HTMLElement {
     : v.seats.map((s) => seatItem(s.name, s.seat));
   return screen(
     "together-status",
-    head(title, [v.together ? chip("ok", "Together", true) : chip("warn", "Not together", true)]),
+    head(title, [v.together ? chip("ok", "Together", true) : chip("warn", "Not together", true), sourceTag(v.provenance)]),
     h(
       "section",
       { class: "split" },
       h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, moved ? "Seat changes since you booked" : "No seat changes since you booked")),
       h("ul", { class: "who", "aria-label": moved ? "Seat changes" : "Seats by traveler" }, ...list),
     ),
-    h("footer", { class: "note" }, `Checked ${checkedAt(v.checkedAt)}`),
+    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, `Checked ${checkedAt(v.checkedAt)}`), provenanceStrip(v.provenance)),
   );
 }
 

@@ -1,7 +1,8 @@
 import type { Cell, SeatMapView, Traveler } from "../../domain.js";
 import { h, reducedMotion } from "./dom.js";
 import { money, seatLetter } from "./format.js";
-import { chip, head, screen, testTag, type Ctx } from "./screens.js";
+import { provenanceStrip, sourceTag } from "./provenance.js";
+import { chip, head, screen, type Ctx } from "./screens.js";
 
 type SeatCell = Extract<Cell, { kind: "seat" }>;
 
@@ -64,7 +65,7 @@ export class SeatMapScreen {
       ? h("div", { class: "map" }, this.cabinEl, this.panel())
       : h("div", { class: "map" }, h("p", { class: "nomap" }, "No seat map came back for this flight."), this.panel());
     this.el.replaceChildren(
-      head(`${v.route.origin} to ${v.route.destination}`, [h("span", { class: "sub" }, sub), v.testMode ? testTag() : null]),
+      head(`${v.route.origin} to ${v.route.destination}`, [h("span", { class: "sub" }, sub), sourceTag(v.provenance)]),
       body,
       this.foot(),
     );
@@ -150,7 +151,8 @@ export class SeatMapScreen {
     });
     return h(
       "footer",
-      { class: "foot" },
+      { class: "foot-stack" },
+      h("div", { class: "foot" },
       h(
         "div",
         { class: "price", "aria-label": "Fare plus seats equals together total" },
@@ -161,6 +163,8 @@ export class SeatMapScreen {
         part(v.togetherTotal === null ? "Not priced" : money(v.togetherTotal, v.currency), "Together total", true),
       ),
       book,
+      ),
+      provenanceStrip(v.provenance),
     );
   }
 
