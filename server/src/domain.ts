@@ -121,6 +121,26 @@ export interface FareComparison {
   cheapestFareLoses: boolean;
 }
 
+/** Another flight of the same search that does seat the family together. */
+export interface Alternative {
+  offerId: string;
+  airline: AirlineInfo;
+  flightNumber: string | null;
+  departingAt: string;
+  fare: number;
+  familyTotal: number;
+}
+
+/**
+ * Set when the flight's open seats cannot put every child beside an adult. This is a finding about the seat map
+ * (read at `provenance`), not a failure to search.
+ */
+export interface NoAdjacentSeats {
+  headline: string;
+  reason: string;
+  alternatives: Alternative[];
+}
+
 export interface SeatMapView {
   kind: "seat-map";
   offerId: string;
@@ -139,6 +159,7 @@ export interface SeatMapView {
   guarantee: boolean;
   togetherTotal: number | null;
   comparison: FareComparison | null;
+  noAdjacent: NoAdjacentSeats | null;
   provenance: Provenance;
   voice: string;
 }

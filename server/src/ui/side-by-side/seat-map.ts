@@ -1,6 +1,6 @@
-import type { Cell, FareComparison, SeatMapView, Traveler } from "../../domain.js";
+import type { Cell, FareComparison, NoAdjacentSeats, SeatMapView, Traveler } from "../../domain.js";
 import { h, reducedMotion } from "./dom.js";
-import { money, seatLetter } from "./format.js";
+import { clock, money, seatLetter } from "./format.js";
 import { provenanceStrip, sourceTag } from "./provenance.js";
 import { chip, head, screen, type Ctx } from "./screens.js";
 
@@ -120,6 +120,7 @@ export class SeatMapScreen {
     const v = this.view;
     const sel = this.selected ? this.traveler(this.selected) : undefined;
     const reasons = [...new Set(v.violations.map((x) => x.reason))];
+    if (v.noAdjacent) return this.noAdjacentPanel(v.noAdjacent);
     return h(
       "aside",
       { class: "panel" },
@@ -133,6 +134,37 @@ export class SeatMapScreen {
       v.comparison ? this.compare(v.comparison) : null,
       sel ? h("p", { class: "hint live" }, `Tap a seat for ${sel.name}.`) : (v.comparison?.rows.length ?? 0) >= 3 ? null : h("p", { class: "hint" }, "Drag a name to a seat."),
       h("div", { class: "legend" }, ...(["adult", "child", "taken"] as const).map((k) => h("span", {}, h("b", { class: `k-${k}`, "aria-hidden": "true" }), k === "adult" ? "Adult" : k === "child" ? "Child" : "Taken"))),
+    );
+  }
+
+  /** The flight cannot seat the family together: say so, and offer the flights of the same search that can. */
+  private noAdjacentPanel(na: NoAdjacentSeats): HTMLElement {
+    const cur = this.view.currency;
+    return h(
+      "aside",
+      { class: "panel none-fit" },
+      h("div", { class: "verdict", role: "status" }, h("p", { class: "finding" }, na.headline), h("p", { class: "reason small" }, na.reason)),
+      na.alternatives.length
+        ? h(
+            "div",
+            { class: "alts", role: "group", "aria-label": "Flights that seat the family together" },
+            ...na.alternatives.map((a) => {
+              const b = h(
+                "button",
+                { class: "alt", type: "button", "data-offer": a.offerId, "aria-label": `${a.airline.name} ${a.flightNumber ?? ""} at ${clock(a.departingAt)}, ${money(a.familyTotal, cur)} together. Show seats.` },
+                h("span", { class: "who" }, h("b", {}, a.airline.name), h("i", {}, `${clock(a.departingAt)} · fare ${money(a.fare, cur)}`)),
+                h("span", { class: "n" }, money(a.familyTotal, cur)),
+              );
+              b.addEventListener("click", async () => {
+                if (b.getAttribute("aria-busy") === "true") return;
+                b.setAttribute("aria-busy", "true");
+                const ok = await this.ctx.run("show_seats", { offer_id: a.offerId });
+                if (!ok) b.removeAttribute("aria-busy");
+              });
+              return b;
+            }),
+          )
+        : h("p", { class: "reason" }, "No other flight in this search seats your family together."),
     );
   }
 
@@ -159,7 +191,7 @@ export class SeatMapScreen {
   private foot(): HTMLElement {
     const v = this.view;
     const part = (n: string, l: string, sum = false) => h("div", { class: sum ? "pp sum" : "pp" }, h("span", { class: "n" }, n), h("span", { class: "l" }, l));
-    const book = h("button", { class: "btn", type: "button" }, "Book it");
+    const book = h("button", { class: "btn", type: "button", disabled: v.noAdjacent ? true : null }, v.noAdjacent ? "No seats to book" : "Book it");
     book.addEventListener("click", async () => {
       if (book.getAttribute("aria-busy") === "true") return;
       book.setAttribute("aria-busy", "true");
@@ -179,7 +211,7 @@ export class SeatMapScreen {
         { class: "price", "aria-label": "Fare plus seats equals together total" },
         part(money(v.fare, v.currency), "Fare"),
         h("span", { class: "op", "aria-hidden": "true" }, "+"),
-        part(money(v.seatFees, v.currency), "Seats"),
+        part(v.togetherTotal === null ? "-" : money(v.seatFees, v.currency), "Seats"),
         h("span", { class: "op", "aria-hidden": "true" }, "="),
         part(v.togetherTotal === null ? "Not priced" : money(v.togetherTotal, v.currency), "Together total", true),
       ),

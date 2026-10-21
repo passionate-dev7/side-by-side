@@ -30,7 +30,15 @@ export interface SeatAssignment {
 
 export type Solution =
   | { status: "TOGETHER"; assignments: SeatAssignment[]; fee: number; blocks: number; unmetPreferences: number; exact: boolean }
-  | { status: "NOT_TOGETHER"; reasons: Array<{ memberId: string | null; reason: string }> };
+  | { status: "NOT_TOGETHER"; cause: NotTogetherCause; reasons: Array<{ memberId: string | null; reason: string }> };
+
+/**
+ * Why no seating exists. "no_adjacent_pair" and "no_arrangement" are findings about the flight (no two open seats side by side,
+ * or not enough of them for every child to have an adult); "search_budget" is not a finding and must never be reported as one.
+ */
+export type NotTogetherCause = "empty_party" | "no_adult" | "no_open_seat" | "no_adjacent_pair" | "no_arrangement" | "search_budget";
+
+export const isAdjacencyFinding = (c: NotTogetherCause) => c === "no_adjacent_pair" || c === "no_arrangement";
 
 export const isGuardian = (m: PartyMember) => m.age >= 18;
 export const needsGuardian = (m: PartyMember) => m.age <= DOT_CHILD_MAX_AGE;
@@ -86,12 +94,12 @@ function* permutations<T>(items: T[]): Generator<T[]> {
 
 export function solveSeating(grid: Grid, party: PartyMember[]): Solution {
   const n = party.length;
-  if (n === 0) return { status: "NOT_TOGETHER", reasons: [{ memberId: null, reason: "No travelers to seat." }] };
+  if (n === 0) return { status: "NOT_TOGETHER", cause: "empty_party", reasons: [{ memberId: null, reason: "No travelers to seat." }] };
 
   const reasons: Array<{ memberId: string | null; reason: string }> = [];
   if (party.some(needsGuardian) && !party.some(isGuardian)) {
     for (const m of party.filter(needsGuardian)) reasons.push({ memberId: m.id, reason: "No adult on this booking to sit beside them." });
-    return { status: "NOT_TOGETHER", reasons };
+    return { status: "NOT_TOGETHER", cause: "no_adult", reasons };
   }
 
   const allSeats = [...grid.seats.values()];
@@ -107,12 +115,13 @@ export function solveSeating(grid: Grid, party: PartyMember[]): Solution {
   party.forEach((m, i) => {
     if (minFee[i] === Infinity) reasons.push({ memberId: m.id, reason: "No bookable seat is left for them on this flight." });
   });
-  if (reasons.length) return { status: "NOT_TOGETHER", reasons };
+  if (reasons.length) return { status: "NOT_TOGETHER", cause: "no_open_seat", reasons };
 
   const slots = buildSlots(grid, n);
   if (party.some(needsGuardian) && !slots.some((s) => s.elements.length >= 2)) {
     return {
       status: "NOT_TOGETHER",
+      cause: "no_adjacent_pair",
       reasons: party.filter(needsGuardian).map((m) => ({ memberId: m.id, reason: "No two open seats are side by side on this flight." })),
     };
   }
@@ -211,7 +220,7 @@ export function solveSeating(grid: Grid, party: PartyMember[]): Solution {
       ? "Search budget exhausted before a seating was found."
       : "No arrangement puts every child beside an adult on the seats still open.";
     const stuck = party.filter(needsGuardian);
-    return { status: "NOT_TOGETHER", reasons: (stuck.length ? stuck : party).map((m) => ({ memberId: m.id, reason: why })) };
+    return { status: "NOT_TOGETHER", cause: exhausted ? "search_budget" : "no_arrangement", reasons: (stuck.length ? stuck : party).map((m) => ({ memberId: m.id, reason: why })) };
   }
   const [fee, blocks, unmetPreferences] = bestKey as Key;
   const order = new Map(party.map((m, i) => [m.id, i]));

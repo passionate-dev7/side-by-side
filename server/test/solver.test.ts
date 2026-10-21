@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildGrid, neighbours, type Grid } from "../src/seatmap.js";
-import { evaluateAssignment, solveSeating, type PartyMember } from "../src/solver.js";
+import { evaluateAssignment, isAdjacencyFinding, solveSeating, type PartyMember } from "../src/solver.js";
 import { dotFeeFreeAdjacent, DOT_SOURCE } from "../src/dot.js";
 import { makeSeatMap } from "./fixtures/seatmap.js";
 
@@ -69,9 +69,27 @@ describe("solver", () => {
     expect(s.reasons.length).toBeGreaterThan(0);
   });
 
-  it("returns NOT_TOGETHER for a child on a booking with no adult", () => {
+  it("returns NOT_TOGETHER for a child on a booking with no adult, on an empty cabin where seats are not the problem", () => {
     const s = solveSeating(grid(), [P("mia", 6), P("leo", 9)]);
-    expect(s.status).toBe("NOT_TOGETHER");
+    expect(s).toMatchObject({ status: "NOT_TOGETHER", cause: "no_adult" });
+    // control: the same cabin seats the same two children once an adult is added
+    expect(solveSeating(grid(), [P("dad", 40), P("mia", 6), P("leo", 9)]).status).toBe("TOGETHER");
+  });
+
+  it("names why no seating exists: no adjacent pair, not enough pairs, and never calls a budget cutoff a finding", () => {
+    const taken: string[] = [];
+    for (let r = 1; r <= 30; r++) for (const c of ["B", "C", "E", "F"]) taken.push(`${r}${c}`);
+    expect(solveSeating(grid({ taken }), family)).toMatchObject({ status: "NOT_TOGETHER", cause: "no_adjacent_pair" });
+
+    // one open pair for a party that needs two
+    const onePair = ["14A", "14B"];
+    const takenExceptPair: string[] = [];
+    for (let r = 1; r <= 30; r++) for (const c of ["A", "B", "C", "D", "E", "F"]) if (!onePair.includes(`${r}${c}`)) takenExceptPair.push(`${r}${c}`);
+    expect(solveSeating(grid({ taken: takenExceptPair }), family)).toMatchObject({ status: "NOT_TOGETHER", cause: "no_arrangement" });
+    expect(isAdjacencyFinding("no_arrangement")).toBe(true);
+    expect(isAdjacencyFinding("no_adjacent_pair")).toBe(true);
+    expect(isAdjacencyFinding("search_budget")).toBe(false);
+    expect(isAdjacencyFinding("no_adult")).toBe(false);
   });
 
   it("never puts a child in an exit row, even when that is the only block", () => {
@@ -175,6 +193,22 @@ describe("solver", () => {
 });
 
 describe("evaluateAssignment", () => {
+  it("a child beside only another child is flagged, and so is the other child: two children never guard each other", () => {
+    const g = grid();
+    const e = evaluateAssignment(g, family, [
+      { memberId: "mia", seat: "10B" }, { memberId: "leo", seat: "10C" },
+      { memberId: "dad", seat: "10D" }, { memberId: "mum", seat: "10E" },
+    ]);
+    expect(e.together).toBe(false);
+    expect(e.violations.map((v) => v.memberId).sort()).toEqual(["leo", "mia"]);
+    // control: swap Leo and Dad so each child touches an adult and the verdict flips
+    const ok = evaluateAssignment(g, family, [
+      { memberId: "mia", seat: "10B" }, { memberId: "dad", seat: "10C" },
+      { memberId: "leo", seat: "10E" }, { memberId: "mum", seat: "10D" },
+    ]);
+    expect(ok.together).toBe(true);
+  });
+
   it("flags a child seated across the aisle from the only adult", () => {
     const g = grid();
     const ev = evaluateAssignment(g, [P("dad", 40), P("mia", 6)], [

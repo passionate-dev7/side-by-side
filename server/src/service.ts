@@ -1,11 +1,13 @@
 import type { SeatMap } from "@duffel/api/types";
 import type {
   AirlineInfo,
+  Alternative,
   BookedView,
   ErrorView,
   FamilyView,
   FareComparison,
   FareRow,
+  NoAdjacentSeats,
   OfferCard,
   OffersView,
   Provenance,
@@ -15,9 +17,9 @@ import type {
   TogetherStatus,
 } from "./domain.js";
 import { DuffelApiError, type CabinClass, type DuffelPort, type OfferSummary } from "./duffel.js";
-import { DOT_SOURCE, dotFeeFreeAdjacent } from "./dot.js";
+import { DOT_CHILD_MAX_AGE, DOT_SOURCE, dotFeeFreeAdjacent } from "./dot.js";
 import { buildGrid, gridFromLayout, layoutOf, viewRows, type Grid } from "./seatmap.js";
-import { evaluateAssignment, solveSeating, type PartyMember, type Solution } from "./solver.js";
+import { evaluateAssignment, isAdjacencyFinding, solveSeating, type PartyMember, type Solution } from "./solver.js";
 import type { BookedOrder, Family, FamilyMember, Plan, Store } from "./store.js";
 
 /** Domain logic behind the tools. Everything that decides seats, prices or booking is plain code here. */
@@ -336,6 +338,40 @@ export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<Off
 // ---------------------------------------------------------------------------------------------------------------
 // seat views
 
+/** Other flights of this offer's search that seat the whole family together, cheapest family total first. */
+function alternativesTo(ctx: Ctx, entry: OfferEntry): Alternative[] {
+  const out: Alternative[] = [];
+  for (const id of entry.search?.offerIds ?? []) {
+    const e = ctx.offers.get(id);
+    if (!e || e === entry) continue;
+    const row = fareRow(e);
+    if (row.familyTotal === null) continue;
+    out.push({ offerId: row.offerId, airline: row.airline, flightNumber: row.flightNumber, departingAt: e.summary.departingAt, fare: row.fare, familyTotal: row.familyTotal });
+  }
+  return out.sort((a, b) => a.familyTotal - b.familyTotal || a.fare - b.fare || a.offerId.localeCompare(b.offerId)).slice(0, 2);
+}
+
+/** An honest "no adjacent seats" finding with the flights that do work, or null when the seat map does not support that finding. */
+function noAdjacentFor(ctx: Ctx, entry: OfferEntry): NoAdjacentSeats | null {
+  const sol = entry.maps?.solution;
+  if (!sol || sol.status !== "NOT_TOGETHER" || !isAdjacencyFinding(sol.cause)) return null;
+  return {
+    headline: "No adjacent seats on this flight",
+    reason: sol.cause === "no_adjacent_pair" ? "No two open seats are side by side." : "Not enough open seats side by side for every child to have an adult beside them.",
+    alternatives: alternativesTo(ctx, entry),
+  };
+}
+
+function noAdjacentSpeech(o: OfferSummary, family: Family, na: NoAdjacentSeats): string {
+  const kids = family.members.filter((m) => m.age <= DOT_CHILD_MAX_AGE).map((m) => m.name);
+  const flight = [o.airline.name, o.flightNumber].filter(Boolean).join(" ");
+  const alt = na.alternatives[0];
+  return (
+    `There are no adjacent seats on ${flight}${kids.length ? ` for ${kids.join(" and ")} to sit beside an adult` : ""}. ` +
+    (alt ? `${alt.airline.name} seats everyone together for ${money(alt.familyTotal, o.currency)}.` : "No other flight in this search seats your family together.")
+  );
+}
+
 /** One spoken sentence when the lowest fare is not the lowest family total. */
 function fareNote(c: FareComparison | null, currency: string): string {
   if (!c?.cheapestFareLoses) return "";
@@ -363,10 +399,14 @@ function buildSeatView(ctx: Ctx, entry: OfferEntry, family: Family, plan: Plan):
   const total = together ? Math.round((o.totalAmount + payable) * 100) / 100 : null;
   const comparison = compareFares(ctx, entry, { seatFees: together ? payable : null, guarantee: guarantee && !plan.customized, total });
 
+  const noAdjacent = noAdjacentFor(ctx, entry);
+
   const placed = assignments.map((a) => `${nameOf.get(a.memberId)} ${a.seat}`).join(", ");
   const voice = together
     ? `${placed}. Everyone has a family neighbor. ${guarantee && !plan.customized ? `${o.airline.name} seats your child beside an adult at no fee, so seats cost nothing.` : payable > 0 ? `Seats cost ${money(payable, o.currency)}.` : "The seats are free."} Total ${money(total!, o.currency)}.${fareNote(comparison, o.currency)}`
-    : `Not together yet. ${ev.violations.map((v) => `${nameOf.get(v.memberId)}: ${v.reason}`).join(" ")}`;
+    : noAdjacent
+      ? noAdjacentSpeech(o, family, noAdjacent)
+      : `Not together yet. ${ev.violations.map((v) => `${nameOf.get(v.memberId)}: ${v.reason}`).join(" ")}`;
 
   return {
     kind: "seat-map",
@@ -385,6 +425,7 @@ function buildSeatView(ctx: Ctx, entry: OfferEntry, family: Family, plan: Plan):
     guarantee,
     togetherTotal: total,
     comparison,
+    noAdjacent,
     provenance: provenanceOf(ctx, o.airline.iata, o.liveMode, false),
     voice,
   };
@@ -492,6 +533,10 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
   // Always re-read the live seat map: seats can be taken between the search and the booking.
   const maps = await loadMaps(ctx, entry, family, true);
   if (!maps) throw new ToolError("no_seat_map", "No seat map for this flight.", "I cannot check seats on that flight.");
+  const noAdjacent = noAdjacentFor(ctx, entry);
+  if (noAdjacent) {
+    throw new ToolError("no_adjacent_seats", `Not booked. ${noAdjacent.headline}: ${noAdjacent.reason}`, `I did not book. ${noAdjacentSpeech(o, family, noAdjacent)}`);
+  }
   const plan = ctx.store.getPlan(ctx.account, o.id);
   if (!plan) throw new ToolError("no_plan", "No seats have been chosen for this fare yet.", "Let me show you the seats first.");
 
