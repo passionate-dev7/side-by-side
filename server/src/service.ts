@@ -25,7 +25,7 @@ import { DuffelApiError, type CabinClass, type DuffelPort, type OfferSummary } f
 import { DOT_CHILD_MAX_AGE, DOT_SOURCE, dotFeeFreeAdjacent } from "./dot.js";
 import { evaluateWaiver } from "./waiver.js";
 import { mapLimit, within } from "./jobs.js";
-import { buildGrid, gridFromLayout, layoutOf, viewRows, type Grid } from "./seatmap.js";
+import { buildGrid, gridFromLayout, layoutOf, viewRows, type Grid, type Layout } from "./seatmap.js";
 import { evaluateAssignment, isAdjacencyFinding, solveSeating, type PartyMember, type Solution } from "./solver.js";
 import type { BookedOrder, Family, FamilyMember, Plan, Store } from "./store.js";
 
@@ -74,6 +74,20 @@ interface SearchJob {
   done: Promise<void>;
 }
 
+/** An order being placed. It outlives the tool call; the view and the next call read its state. */
+interface BookingJob {
+  offerId: string;
+  status: "booking" | "confirmed" | "failed";
+  /** What is shown while the order is placed. */
+  pending: BookedView;
+  view?: BookedView;
+  error?: ToolError;
+  /** The airline accepted the order but has not issued a reference: a retry resumes this order instead of placing another. */
+  orderId?: string;
+  reported: boolean;
+  done: Promise<void>;
+}
+
 export interface Ctx {
   duffel: DuffelPort | null;
   store: Store;
@@ -91,6 +105,13 @@ export interface Ctx {
   /** A finished search is reused for this long, and never past the expiry of any of its offers. */
   searchTtlMs: number;
   searches: Map<string, SearchJob>;
+  /** Bookings by offer: a repeat of book_together for the same offer returns this one and never places a second order. */
+  bookings: Map<string, BookingJob>;
+  /** The last live reading of each booked order, served while the next one is under way. */
+  statusCache: Map<string, StatusView>;
+  refreshing: Map<string, Promise<StatusView>>;
+  /** A reading this young is served as it is, without asking the airline again. */
+  statusFreshMs: number;
 }
 
 export function createCtx(parts: Pick<Ctx, "duffel" | "store"> & Partial<Ctx>): Ctx {
@@ -104,6 +125,10 @@ export function createCtx(parts: Pick<Ctx, "duffel" | "store"> & Partial<Ctx>): 
     seatMapConcurrency: 4,
     searchTtlMs: 120_000,
     searches: new Map(),
+    bookings: new Map(),
+    statusCache: new Map(),
+    refreshing: new Map(),
+    statusFreshMs: 3000,
     ...parts,
   };
 }
@@ -659,16 +684,156 @@ function titleFor(m: FamilyMember): "mr" | "ms" | "miss" {
   return m.gender === "m" ? "mr" : m.age >= 18 ? "ms" : "miss";
 }
 
-export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed: boolean }, elicit: Elicit | null): Promise<BookedView> {
-  let family = requireFamily(ctx);
+const toolError = (e: unknown): ToolError =>
+  e instanceof ToolError ? e : new ToolError("internal_error", "Something went wrong inside the add-on.", "Something went wrong on my side. I have not changed anything.");
+
+/** Waits up to the budget for a booking. Confirmed answers with the reference, failed raises once, otherwise the booking state. */
+async function settleBooking(ctx: Ctx, job: BookingJob, budgetMs = ctx.budgetMs): Promise<BookedView> {
+  if (Number.isFinite(budgetMs)) await within(job.done, budgetMs);
+  else await job.done;
+  if (job.status === "failed") {
+    job.reported = true;
+    throw job.error!;
+  }
+  return job.status === "confirmed" ? job.view! : job.pending;
+}
+
+/**
+ * Places the order and waits for the airline's reference. Runs after the family has said yes, so it re-reads the live seat
+ * map once more: seats can be taken between the search and the booking, and a total that moved is never charged.
+ */
+async function runBooking(ctx: Ctx, job: BookingJob, family: Family, entry: OfferEntry, plan: Plan, expected: { strategy: BookedView["strategy"]; total: number }): Promise<BookedView> {
   const duffel = duffelOrThrow(ctx);
+  const o = entry.summary;
+  let orderId = job.orderId;
+  let layout: Layout | null = null;
+
+  if (!orderId) {
+    const maps = await loadMaps(ctx, entry, family, true);
+    if (!maps) throw new ToolError("no_seat_map", "No seat map for this flight.", "I cannot check seats on that flight.");
+    const noAdjacent = noAdjacentFor(ctx, entry);
+    if (noAdjacent) {
+      throw new ToolError("no_adjacent_seats", `Not booked. ${noAdjacent.headline}: ${noAdjacent.reason}`, `I did not book. ${noAdjacentSpeech(o, family, noAdjacent)}`);
+    }
+    const ev = evaluateAssignment(maps.grid, partyFor(family, o.passengerIds), Object.entries(plan.assignments).map(([memberId, seat]) => ({ memberId, seat })));
+    if (!ev.together) {
+      const nameOf = new Map(family.members.map((m) => [m.id, m.name]));
+      const why = ev.violations.map((v) => `${nameOf.get(v.memberId)}: ${v.reason}`).join(" ");
+      throw new ToolError("not_together", `Not booked. The family would not sit together. ${why}`, `I did not book. ${why}`);
+    }
+    const waiver = waiverFor(o, family, maps.solution.status === "TOGETHER", plan.customized);
+    const strategy: BookedView["strategy"] = waiver.applies ? "airline-guarantee" : "seat-services";
+    const total = Math.round((o.totalAmount + (strategy === "seat-services" ? ev.fee / 100 : 0)) * 100) / 100;
+    if (strategy !== expected.strategy || total !== expected.total) {
+      throw new ToolError("price_changed", `Not booked. The total moved from ${money(expected.total, o.currency)} to ${money(total, o.currency)} since you agreed.`, `I did not book. The price moved from ${money(expected.total, o.currency)} to ${money(total, o.currency)}. Ask me again if you still want it.`);
+    }
+    const serviceIds =
+      strategy === "seat-services"
+        ? Object.entries(plan.assignments).map(([memberId, seat]) => {
+            const idx = family.members.findIndex((m) => m.id === memberId);
+            const id = maps.grid.seats.get(seat)?.serviceIds.get(o.passengerIds[idx]);
+            if (!id) throw new ToolError("seat_unavailable", `Seat ${seat} cannot be booked.`, `Seat ${seat} is no longer available.`);
+            return id;
+          })
+        : [];
+    layout = layoutOf(maps.grid);
+    const created = await wrapDuffel(
+      duffel.createOrder({
+        offerId: o.id,
+        passengers: family.members.map((m, i) => ({
+          passengerId: o.passengerIds[i],
+          title: titleFor(m),
+          givenName: m.name,
+          familyName: family.familyName!,
+          bornOn: m.bornOn!,
+          gender: m.gender!,
+          email: family.email!,
+          phoneNumber: family.phoneNumber!,
+        })),
+        serviceIds,
+        amount: total.toFixed(2),
+        currency: o.currency,
+      }),
+    );
+    orderId = created.orderId;
+    job.orderId = orderId;
+  }
+
+  // An accepted order request is not a booking. Wait for the airline's booking reference.
+  let detail = await wrapDuffel(duffel.getOrder(orderId));
+  for (let i = 1; !detail.bookingReference && i < ctx.poll.attempts; i++) {
+    await new Promise((r) => setTimeout(r, ctx.poll.delayMs));
+    detail = await wrapDuffel(duffel.getOrder(orderId));
+  }
+  if (!detail.bookingReference) {
+    throw new ToolError("order_pending", `Order ${orderId} was accepted but has no booking reference yet.`, "The order is still pending with the airline. I have not got a booking reference yet.");
+  }
+
+  const seatsByMember: Record<string, string | null> = {};
+  const passengerIds: Record<string, string> = {};
+  family.members.forEach((m, i) => {
+    passengerIds[m.id] = o.passengerIds[i];
+    seatsByMember[m.id] = detail.seats[o.passengerIds[i]] ?? null;
+  });
+
+  const booked: BookedOrder = {
+    orderId,
+    bookingReference: detail.bookingReference,
+    offerId: o.id,
+    strategy: expected.strategy,
+    passengerIds,
+    seats: seatsByMember,
+    layout: layout ?? (entry.maps ? layoutOf(entry.maps.grid) : {}),
+    members: family.members,
+    airline: o.airline,
+    cabinClass: o.cabinClass,
+    route: { origin: o.origin, destination: o.destination, departingAt: o.departingAt },
+    currency: detail.currency,
+    total: detail.totalAmount,
+    liveMode: detail.liveMode,
+    createdAt: ctx.now().toISOString(),
+  };
+  ctx.store.saveOrder(ctx.account, booked);
+
+  const seats = family.members.map((m) => ({ name: m.name, seat: seatsByMember[m.id] }));
+  return {
+    kind: "booked",
+    offerId: o.id,
+    status: "confirmed",
+    orderId: booked.orderId,
+    bookingReference: booked.bookingReference,
+    testMode: !booked.liveMode,
+    airline: airlineInfo(o.airline),
+    route: booked.route,
+    currency: booked.currency,
+    total: booked.total,
+    seats,
+    strategy: expected.strategy,
+    provenance: provenanceOf(ctx, o.airline.iata, booked.liveMode, true),
+    voice: `Booked. Reference ${booked.bookingReference.split("").join(" ")}. ${expected.strategy === "seat-services" ? seatList(seats) + "." : `${o.airline.name} will seat your child beside an adult at no fee.`} Total ${money(booked.total, booked.currency)}.`,
+  };
+}
+
+export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed: boolean }, elicit: Elicit | null): Promise<BookedView> {
+  // A repeat for the same offer is a question about the booking, never a second order.
+  const existing = ctx.bookings.get(input.offerId);
+  if (existing && existing.status !== "failed") return settleBooking(ctx, existing);
+  if (existing?.status === "failed" && !existing.reported) {
+    existing.reported = true;
+    throw existing.error!;
+  }
+  // The airline accepted that order and had no reference yet: a retry resumes it rather than placing a second one.
+  const resume = existing?.status === "failed" ? existing.orderId : undefined;
+
+  let family = requireFamily(ctx);
+  duffelOrThrow(ctx);
   const entry = entryFor(ctx, input.offerId);
   const o = entry.summary;
 
-  if (ctx.now() >= new Date(o.expiresAt)) throw new ToolError("offer_expired", "That fare has expired.", "That fare expired. Let me search again.");
+  if (expired(ctx, o)) throw new ToolError("offer_expired", "That fare has expired.", "That fare expired. Let me search again.");
 
-  // Always re-read the live seat map: seats can be taken between the search and the booking.
-  const maps = await loadMaps(ctx, entry, family, true);
+  // Cheap checks first, from the seat map the search already read. The live re-read happens after the family says yes.
+  const maps = await loadMaps(ctx, entry, family);
   if (!maps) throw new ToolError("no_seat_map", "No seat map for this flight.", "I cannot check seats on that flight.");
   const noAdjacent = noAdjacentFor(ctx, entry);
   if (noAdjacent) {
@@ -739,86 +904,45 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
     throw new ToolError("confirmation_required", `${summary} Call again with confirmed true to book.`, `${summary} Say yes to book it.`);
   }
 
-  const serviceIds =
-    strategy === "seat-services"
-      ? Object.entries(plan.assignments).map(([memberId, seat]) => {
-          const idx = family.members.findIndex((m) => m.id === memberId);
-          const id = maps.grid.seats.get(seat)?.serviceIds.get(o.passengerIds[idx]);
-          if (!id) throw new ToolError("seat_unavailable", `Seat ${seat} cannot be booked.`, `Seat ${seat} is no longer available.`);
-          return id;
-        })
-      : [];
-
-  const created = await wrapDuffel(
-    duffel.createOrder({
-      offerId: o.id,
-      passengers: family.members.map((m, i) => ({
-        passengerId: o.passengerIds[i],
-        title: titleFor(m),
-        givenName: m.name,
-        familyName: family.familyName!,
-        bornOn: m.bornOn!,
-        gender: m.gender!,
-        email: family.email!,
-        phoneNumber: family.phoneNumber!,
-      })),
-      serviceIds,
-      amount: total.toFixed(2),
-      currency: o.currency,
-    }),
-  );
-
-  // An accepted order request is not a booking. Wait for the airline's booking reference.
-  let detail = await wrapDuffel(duffel.getOrder(created.orderId));
-  for (let i = 1; !detail.bookingReference && i < ctx.poll.attempts; i++) {
-    await new Promise((r) => setTimeout(r, ctx.poll.delayMs));
-    detail = await wrapDuffel(duffel.getOrder(created.orderId));
-  }
-  if (!detail.bookingReference) {
-    throw new ToolError("order_pending", `Order ${created.orderId} was accepted but has no booking reference yet.`, "The order is still pending with the airline. I have not got a booking reference yet.");
-  }
-
-  const seatsByMember: Record<string, string | null> = {};
-  const passengerIds: Record<string, string> = {};
-  family.members.forEach((m, i) => {
-    passengerIds[m.id] = o.passengerIds[i];
-    seatsByMember[m.id] = detail.seats[o.passengerIds[i]] ?? null;
-  });
-
-  const booked: BookedOrder = {
-    orderId: created.orderId,
-    bookingReference: detail.bookingReference,
+  // From here the airline's clock runs, not ours: answer with the booking state and finish the order in the background.
+  const planned = family.members.map((m) => ({ name: m.name, seat: strategy === "seat-services" ? (plan.assignments[m.id] ?? null) : null }));
+  const flight = `${o.airline.name} ${o.flightNumber ?? ""}`.trim();
+  const job: BookingJob = {
     offerId: o.id,
-    strategy,
-    passengerIds,
-    seats: seatsByMember,
-    layout: layoutOf(maps.grid),
-    members: family.members,
-    airline: o.airline,
-    cabinClass: o.cabinClass,
-    route: { origin: o.origin, destination: o.destination, departingAt: o.departingAt },
-    currency: detail.currency,
-    total: detail.totalAmount,
-    liveMode: detail.liveMode,
-    createdAt: ctx.now().toISOString(),
+    status: "booking",
+    pending: {
+      kind: "booked",
+      offerId: o.id,
+      status: "booking",
+      orderId: null,
+      bookingReference: null,
+      testMode: !o.liveMode,
+      airline: airlineInfo(o.airline),
+      route: { origin: o.origin, destination: o.destination, departingAt: o.departingAt },
+      currency: o.currency,
+      total,
+      seats: planned,
+      strategy,
+      provenance: provenanceOf(ctx, o.airline.iata, o.liveMode, false),
+      voice: `I am booking ${flight} for ${money(total, o.currency)} now. The reference comes back in a few seconds and the screen shows it. Ask me again if you want it read out.`,
+    },
+    ...(resume ? { orderId: resume } : {}),
+    reported: false,
+    done: Promise.resolve(),
   };
-  ctx.store.saveOrder(ctx.account, booked);
-
-  const seats = family.members.map((m) => ({ name: m.name, seat: seatsByMember[m.id] }));
-  return {
-    kind: "booked",
-    orderId: booked.orderId,
-    bookingReference: booked.bookingReference,
-    testMode: !booked.liveMode,
-    airline: airlineInfo(o.airline),
-    route: booked.route,
-    currency: booked.currency,
-    total: booked.total,
-    seats,
-    strategy,
-    provenance: provenanceOf(ctx, o.airline.iata, booked.liveMode, true),
-    voice: `Booked. Reference ${booked.bookingReference.split("").join(" ")}. ${strategy === "seat-services" ? seatList(seats) + "." : `${o.airline.name} will seat your child beside an adult at no fee.`} Total ${money(booked.total, booked.currency)}.`,
-  };
+  job.done = runBooking(ctx, job, family, entry, plan, { strategy, total }).then(
+    (view) => {
+      job.view = view;
+      job.status = "confirmed";
+    },
+    (e: unknown) => {
+      job.status = "failed";
+      job.error = toolError(e);
+      if (!(e instanceof ToolError)) console.error("booking failed:", e instanceof Error ? e.message : e);
+    },
+  );
+  ctx.bookings.set(o.id, job);
+  return settleBooking(ctx, job);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -853,11 +977,9 @@ async function proposeReseat(ctx: Ctx, stored: BookedOrder, current: Record<stri
   return { status: "proposal", moves, fee, currency, guaranteeApplies: dotFeeFreeAdjacent(stored.airline.iata) === true };
 }
 
-export async function stillTogether(ctx: Ctx, orderId?: string): Promise<StatusView> {
+/** One live reading of a booked order against the seats it was booked with. Slow: it asks the airline. */
+async function liveStatus(ctx: Ctx, stored: BookedOrder): Promise<StatusView> {
   const duffel = duffelOrThrow(ctx);
-  const stored = orderId ? ctx.store.getOrder(ctx.account, orderId) : ctx.store.latestOrder(ctx.account);
-  if (!stored) throw new ToolError("no_booking", "No booked trip found.", "I do not see a booked trip yet.");
-
   const detail = await wrapDuffel(duffel.getOrder(stored.orderId));
   const party: PartyMember[] = stored.members.map((m) => ({ id: m.id, passengerId: stored.passengerIds[m.id], age: m.age }));
 
@@ -938,7 +1060,81 @@ export async function stillTogether(ctx: Ctx, orderId?: string): Promise<StatusV
     reseat,
     airlineChanges,
     checkedAt: ctx.now().toISOString(),
+    refreshing: false,
     provenance: provenanceOf(ctx, stored.airline.iata, detail.liveMode, true),
     voice,
   };
+}
+
+const ago = (ms: number) => {
+  const s = Math.max(1, Math.round(ms / 1000));
+  return s < 90 ? `${s} seconds ago` : `${Math.round(s / 60)} minutes ago`;
+};
+
+/** What is known of an order with no live reading yet: the seats it was booked with. */
+function bookedStatus(ctx: Ctx, stored: BookedOrder): StatusView {
+  const seats = stored.members.map((m) => ({ name: m.name, seat: stored.seats[m.id] ?? null }));
+  const seated = seats.every((s) => s.seat);
+  return {
+    kind: "together-status",
+    orderId: stored.orderId,
+    bookingReference: stored.bookingReference,
+    airline: airlineInfo(stored.airline),
+    together: seated,
+    seats,
+    changes: [],
+    affected: [],
+    reseat: null,
+    airlineChanges: { open: 0, scheduleChanged: false },
+    checkedAt: stored.createdAt,
+    refreshing: true,
+    provenance: provenanceOf(ctx, stored.airline.iata, stored.liveMode, true),
+    voice: seated
+      ? `You booked ${seatList(seats)}. I am checking with ${stored.airline.name} for changes and the screen updates when it answers.`
+      : `You are booked on ${stored.airline.name}, reference ${stored.bookingReference}. I am checking with them for seats and the screen updates when it answers.`,
+  };
+}
+
+/**
+ * The still-together check, answered inside the budget. A fresh reading is started (or joined) every time; if it lands in
+ * time it is the answer, otherwise the last reading is returned marked as refreshing, with how old it is, and the next
+ * call or the view picks up the fresh one.
+ */
+export async function checkTrip(ctx: Ctx, orderId?: string, opts: { budgetMs?: number; fresh?: boolean } = {}): Promise<StatusView | BookedView> {
+  const budgetMs = opts.budgetMs ?? ctx.budgetMs;
+  duffelOrThrow(ctx);
+  const stored = orderId ? ctx.store.getOrder(ctx.account, orderId) : ctx.store.latestOrder(ctx.account);
+  if (!stored) {
+    const placing = [...ctx.bookings.values()].find((j) => j.status === "booking");
+    if (placing && !orderId) return settleBooking(ctx, placing, budgetMs);
+    throw new ToolError("no_booking", "No booked trip found.", "I do not see a booked trip yet.");
+  }
+  const id = stored.orderId;
+  const known = ctx.statusCache.get(id);
+  if (known && !opts.fresh && ctx.now().getTime() - new Date(known.checkedAt).getTime() < ctx.statusFreshMs) return known;
+  let reading = ctx.refreshing.get(id);
+  if (!reading) {
+    reading = liveStatus(ctx, stored).then((v) => {
+      ctx.statusCache.set(id, v);
+      return v;
+    });
+    const mine = reading;
+    const clear = () => {
+      if (ctx.refreshing.get(id) === mine) ctx.refreshing.delete(id);
+    };
+    mine.then(clear, clear);
+    ctx.refreshing.set(id, mine);
+  }
+  const r = Number.isFinite(budgetMs) ? await within(reading, budgetMs) : { done: true as const, value: await reading };
+  if (r.done) return r.value;
+  const last = ctx.statusCache.get(id);
+  if (!last) return bookedStatus(ctx, stored);
+  return { ...last, refreshing: true, voice: `As of ${ago(ctx.now().getTime() - new Date(last.checkedAt).getTime())}: ${last.voice} I am checking again.` };
+}
+
+/** The same check for callers that need the reading itself: waits for the fresh one. */
+export async function stillTogether(ctx: Ctx, orderId?: string): Promise<StatusView> {
+  const v = await checkTrip(ctx, orderId, { budgetMs: Number.POSITIVE_INFINITY, fresh: true });
+  if (v.kind !== "together-status") throw new ToolError("booking_in_progress", "The booking is still being placed.", "Your booking is still being confirmed.");
+  return v;
 }

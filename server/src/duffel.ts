@@ -232,9 +232,11 @@ export function createDuffelPort(token: string, basePath?: string): DuffelPort {
 
     async getOrder(orderId) {
       try {
-        const o = (await duffel.orders.get(orderId)).data;
+        // The order and its airline-initiated changes are independent reads: ask for both at once.
+        const [order, changeList] = await Promise.all([duffel.orders.get(orderId), duffel.airlineInitiatedChanges.list(orderId)]);
+        const o = order.data;
         const seg = o.slices[0].segments[0];
-        const changes: AirlineInitiatedChange[] = (await duffel.airlineInitiatedChanges.list(orderId)).data;
+        const changes: AirlineInitiatedChange[] = changeList.data;
         return {
           id: o.id,
           bookingReference: o.booking_reference || null,

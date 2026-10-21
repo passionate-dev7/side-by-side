@@ -1,6 +1,6 @@
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
-import { bookTogether, findFamilyFlights, moveTraveler, saveFamily, showSeats, stillTogether } from "../service.js";
+import { bookTogether, checkTrip, findFamilyFlights, moveTraveler, saveFamily, showSeats } from "../service.js";
 import { loadView } from "../ui/load-view.js";
 import { elicitorFor, guarded, SEATS_UI_URI, type ToolModule } from "./shared.js";
 
@@ -139,6 +139,6 @@ export const register: ToolModule = (server, ctx) => {
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
       _meta: ui,
     },
-    (a) => guarded(() => stillTogether(ctx, a.order_id)),
+    (a) => guarded(() => checkTrip(ctx, a.order_id)),
   );
 };

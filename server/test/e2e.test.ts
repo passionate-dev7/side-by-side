@@ -101,11 +101,11 @@ describe("family journey, end to end over MCP", () => {
     expect(booked).toMatchObject({ kind: "booked", strategy: "seat-services", bookingReference: "FXT4KQ", total: delta.togetherTotal });
 
     // terminal state, read from the order itself and from the stored booking, not from the tool's answer
-    const order = await fake.getOrder(booked.orderId);
+    const order = await fake.getOrder(booked.orderId!);
     expect(order.bookingReference).toBe("FXT4KQ");
     expect(order.totalAmount).toBe(delta.togetherTotal);
     expect(Object.values(order.seats).every((s) => s !== null)).toBe(true);
-    expect(first.ctx.store.getOrder("default", booked.orderId)).toMatchObject({ bookingReference: "FXT4KQ", strategy: "seat-services" });
+    expect(first.ctx.store.getOrder("default", booked.orderId!)).toMatchObject({ bookingReference: "FXT4KQ", strategy: "seat-services" });
 
     const same = await call<StatusView>(c, "still_together", {});
     expect(same.view).toMatchObject({ together: true, changes: [], affected: [] });

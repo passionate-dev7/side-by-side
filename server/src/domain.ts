@@ -201,8 +201,11 @@ export interface SeatMapView {
 
 export interface BookedView {
   kind: "booked";
-  orderId: string;
-  bookingReference: string;
+  offerId: string;
+  /** "booking": the order is being placed and confirmed with the airline; ask again for the reference. "confirmed": it has one. */
+  status: "booking" | "confirmed";
+  orderId: string | null;
+  bookingReference: string | null;
   testMode: boolean;
   airline: AirlineInfo;
   route: { origin: string; destination: string; departingAt: string };
@@ -254,6 +257,8 @@ export interface StatusView {
   /** Airline-initiated changes still waiting for the traveler's answer. */
   airlineChanges: { open: number; scheduleChanged: boolean };
   checkedAt: string;
+  /** True while a fresh read of the order is under way and this answer is the last one known. */
+  refreshing: boolean;
   provenance: Provenance;
   voice: string;
 }

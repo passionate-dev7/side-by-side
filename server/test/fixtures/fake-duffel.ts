@@ -212,6 +212,7 @@ export class FakeDuffel implements DuffelPort {
 
   async createOrder(input: { offerId: string; passengers: OrderPassengerInput[]; serviceIds: string[]; amount: string; currency: string }) {
     this.calls.push("createOrder");
+    if (this.delay.order) await new Promise((r) => setTimeout(r, this.delay.order));
     const o = this.offers.get(input.offerId);
     if (!o) throw new DuffelApiError("not_found", "offer not found", 404);
     if (this.expired.has(input.offerId)) throw new DuffelApiError("offer_no_longer_available", "The offer is no longer available", 422);
@@ -246,6 +247,7 @@ export class FakeDuffel implements DuffelPort {
 
   async getOrder(orderId: string): Promise<OrderDetail> {
     this.calls.push(`getOrder:${orderId}`);
+    if (this.delay.order) await new Promise((r) => setTimeout(r, this.delay.order));
     const ord = this.orders.get(orderId);
     if (!ord) throw new DuffelApiError("not_found", "order not found", 404);
     const o = this.offers.get(ord.offerId)!;

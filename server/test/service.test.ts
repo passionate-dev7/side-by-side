@@ -319,7 +319,7 @@ describe("a DOT-listed carrier does not get $0 seats unless the dashboard's cond
     expect(moved.togetherTotal).toBe(884);
     const booked = await bookTogether(ctx, { offerId: "off_jetblue", confirmed: true }, null);
     expect(booked).toMatchObject({ strategy: "seat-services", total: 884 });
-    expect(fake.orders.get(booked.orderId)!.total).toBe(884);
+    expect(fake.orders.get(booked.orderId!)!.total).toBe(884);
   });
 
   const splitEconomy = { ...JB, taken: (d: string) => !["A", "D"].includes(col(d)) || rowNo(d) % 2 === 0, premium: { rows: 6, layout: [3, 3], cabinClass: "premium_economy" as const } };
@@ -366,7 +366,7 @@ describe("a carrier that is not on the DOT dashboard is not fee-free", () => {
     expect(booked.strategy).toBe("seat-services");
     expect(booked.total).toBe(572);
     expect(booked.provenance.rule.listed).toBe(false);
-    expect(fake.orders.get(booked.orderId)!.total).toBe(572);
+    expect(fake.orders.get(booked.orderId!)!.total).toBe(572);
   });
 
   it("control: the same flight under a carrier that is on the dashboard and guarantees it costs the fare only", async () => {
@@ -459,7 +459,7 @@ describe("book_together", () => {
     expect(v.provenance).toMatchObject({ source: "fixture", booking: { mode: "test", placed: true } });
     expect(fake.orders.size).toBe(1);
     expect(fake.calls.filter((c) => c.startsWith("getOrder")).length).toBeGreaterThanOrEqual(3);
-    expect(ctx.store.getOrder("default", v.orderId)).not.toBeNull();
+    expect(ctx.store.getOrder("default", v.orderId!)).not.toBeNull();
   });
 
   it("Delta: books four seat services whose seats pass the adjacency check on the airline's own seat map, and pays fare plus $90", async () => {
@@ -470,7 +470,7 @@ describe("book_together", () => {
     expect(v.total).toBe(850);
     expect(v.seats.every((s) => s.seat)).toBe(true);
     // post-condition read back from the order, judged against the original seat map
-    const order = fake.orders.get(v.orderId)!;
+    const order = fake.orders.get(v.orderId!)!;
     const members = ctx.store.getFamily("default")!.members;
     const party = members.map((m, i) => ({ id: m.id, passengerId: `pas_${i}`, age: m.age }));
     const grid = buildGrid(fake.offers.get("off_delta")!.map);
@@ -582,9 +582,9 @@ describe("still_together (a new session, state read from the store)", () => {
     expect(yes.voice).toMatch(/^Yes/);
     expect(yes.provenance).toMatchObject({ source: "fixture", booking: { mode: "test", placed: true } });
 
-    const mia = ctx.store.getOrder("default", booked.orderId)!.passengerIds.mia;
+    const mia = ctx.store.getOrder("default", booked.orderId!)!.passengerIds.mia;
     const from = booked.seats.find((s) => s.name === "Mia")!.seat;
-    fake.airlineMovesSeat(booked.orderId, mia, "30F");
+    fake.airlineMovesSeat(booked.orderId!, mia, "30F");
     const no = await stillTogether(ctx);
     expect(no.together).toBe(false);
     expect(no.changes).toEqual([{ name: "Mia", from, to: "30F", via: ["order", "airline-change"] }]);
@@ -596,13 +596,13 @@ describe("still_together (a new session, state read from the store)", () => {
     await searched();
     await showSeats(ctx, "off_delta");
     const booked = await bookTogether(ctx, { offerId: "off_delta", confirmed: true }, null);
-    const stored = ctx.store.getOrder("default", booked.orderId)!;
+    const stored = ctx.store.getOrder("default", booked.orderId!)!;
     return { booked, stored, seat: (name: string) => booked.seats.find((s) => s.name === name)!.seat!, pid: (id: string) => stored.passengerIds[id] };
   }
 
   it("airline moves a child away: the view names the child, her old and new seat, and offers seats that put her beside an adult again", async () => {
     const { booked, seat, pid } = await bookedDelta();
-    fake.airlineMovesSeat(booked.orderId, pid("mia"), "30F");
+    fake.airlineMovesSeat(booked.orderId!, pid("mia"), "30F");
     const s = await stillTogether(ctx);
     expect(s.together).toBe(false);
     expect(s.provenance).toMatchObject({ source: "fixture", offer: "test", booking: { mode: "test", placed: true } });
@@ -628,8 +628,8 @@ describe("still_together (a new session, state read from the store)", () => {
 
   it("control: the airline swaps two parents and the children still have an adult beside them, so nothing is flagged", async () => {
     const { booked, seat, pid } = await bookedDelta();
-    fake.airlineMovesSeat(booked.orderId, pid("dad"), seat("Mum"));
-    fake.airlineMovesSeat(booked.orderId, pid("mum"), seat("Dad"));
+    fake.airlineMovesSeat(booked.orderId!, pid("dad"), seat("Mum"));
+    fake.airlineMovesSeat(booked.orderId!, pid("mum"), seat("Dad"));
     const s = await stillTogether(ctx);
     expect(s.together).toBe(true);
     expect(s.affected).toEqual([]);
@@ -640,9 +640,9 @@ describe("still_together (a new session, state read from the store)", () => {
 
   it("a change the airline has proposed but the order does not show yet still flags the child, and says it is a pending change", async () => {
     const { booked, seat, pid } = await bookedDelta();
-    fake.airlineProposesSeat(booked.orderId, pid("leo"), "30A");
+    fake.airlineProposesSeat(booked.orderId!, pid("leo"), "30A");
     const s = await stillTogether(ctx);
-    expect(fake.orders.get(booked.orderId)!.seats[pid("leo")]).toBe(seat("Leo"));
+    expect(fake.orders.get(booked.orderId!)!.seats[pid("leo")]).toBe(seat("Leo"));
     expect(s.together).toBe(false);
     expect(s.affected.map((a) => a.name)).toEqual(["Leo"]);
     expect(s.changes).toEqual([{ name: "Leo", from: seat("Leo"), to: "30A", via: ["airline-change"] }]);
@@ -650,7 +650,7 @@ describe("still_together (a new session, state read from the store)", () => {
 
   it("when the airline's seat map no longer answers, it says so and still names the child and who to ask", async () => {
     const { booked, pid } = await bookedDelta();
-    fake.airlineMovesSeat(booked.orderId, pid("mia"), "30F");
+    fake.airlineMovesSeat(booked.orderId!, pid("mia"), "30F");
     fake.noSeatMap.add("off_delta");
     const s = await stillTogether(ctx);
     expect(s.affected.map((a) => a.name)).toEqual(["Mia"]);
@@ -662,9 +662,9 @@ describe("still_together (a new session, state read from the store)", () => {
     await searched();
     await showSeats(ctx, "off_jetblue");
     const booked = await bookTogether(ctx, { offerId: "off_jetblue", confirmed: true }, null);
-    const stored = ctx.store.getOrder("default", booked.orderId)!;
+    const stored = ctx.store.getOrder("default", booked.orderId!)!;
     // JetBlue assigns seats after booking, and puts Mia away from every adult
-    Object.assign(fake.orders.get(booked.orderId)!.seats, { [stored.passengerIds.dad]: "12A", [stored.passengerIds.mum]: "12B", [stored.passengerIds.leo]: "12C", [stored.passengerIds.mia]: "28F" });
+    Object.assign(fake.orders.get(booked.orderId!)!.seats, { [stored.passengerIds.dad]: "12A", [stored.passengerIds.mum]: "12B", [stored.passengerIds.leo]: "12C", [stored.passengerIds.mia]: "28F" });
     const s = await stillTogether(ctx);
     expect(s.affected.map((a) => a.name)).toEqual(["Mia"]);
     expect(s.reseat).toMatchObject({ status: "proposal", guaranteeApplies: true });
