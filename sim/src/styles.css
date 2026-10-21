@@ -184,6 +184,17 @@ h1, h2 { font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; min
 .track .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--text); }
 .track-scale { position: relative; height: 18px; margin-top: 6px; font-size: 12px; color: var(--dim); }
 .track-scale span:last-child { position: absolute; transform: translateX(-100%); white-space: nowrap; padding-right: 6px; }
+.steps { list-style: none; padding: 0; margin-top: 10px; font-family: var(--mono); font-size: 12px; display: grid; }
+.steps li { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; gap: 8px; padding: 4px 0; border-top: 1px solid var(--line); align-items: baseline; }
+.step-m { color: var(--signal); }
+.step-s { color: var(--dim); overflow-wrap: anywhere; min-width: 0; }
+.step-ms { text-align: right; color: var(--text); }
+.step-ms.slow { color: var(--danger); font-weight: 600; }
+.steps li.error .step-m { color: var(--danger); }
+.fixture { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border: 1px dashed var(--warn); border-radius: 10px; font-size: 13px; }
+.fixture .tagline { color: var(--warn); font-weight: 600; }
+.fixture button { height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
+.fixture-note { color: var(--dim); flex-basis: 100%; }
 .llm-line { margin-top: 6px; font-size: 13px; color: var(--dim); }
 .llm-line b { color: var(--text); font-family: var(--mono); font-weight: 500; }
 

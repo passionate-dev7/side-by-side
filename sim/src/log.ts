@@ -79,3 +79,32 @@ export function latencyOf(rows: readonly LogRow[], match: (r: LogRow) => boolean
     .sort((a, b) => a - b);
   return { count: ms.length, p50: percentile(ms, 50), p95: percentile(ms, 95), max: ms.length ? ms[ms.length - 1] : null };
 }
+
+export interface WireStep {
+  id: number;
+  at: number;
+  method: "initialize" | "notifications/initialized" | "tools/list" | "tools/call";
+  /** What the step is about: the negotiated protocol, the tool count, or the tool name. */
+  subject: string;
+  ms?: number;
+  /** The time includes a person filling in a form. */
+  formWait: boolean;
+  status: LogStatus;
+}
+
+const STEPS = new Set(["initialize", "notifications/initialized", "tools/list", "tools/call"]);
+
+/** The handshake and every tool call, in order, taken from the MCP rows of the event log. */
+export function wireSteps(rows: readonly LogRow[]): WireStep[] {
+  return rows
+    .filter((r) => r.source === "mcp" && STEPS.has(r.label))
+    .map((r) => ({
+      id: r.id,
+      at: r.at,
+      method: r.label as WireStep["method"],
+      subject: r.note ?? "",
+      ...(r.ms !== undefined ? { ms: r.ms } : {}),
+      formWait: r.excluded === true,
+      status: r.status,
+    }));
+}

@@ -102,7 +102,10 @@ class WireTransport extends StreamableHTTPClientTransport {
         const p = (f.params ?? {}) as { name?: unknown; arguments?: Record<string, unknown> };
         if (typeof p.name === "string") this.onToolResult?.(p.name, p.arguments ?? {}, result as unknown as CallToolResult);
       }
-      const note = f.method === "initialize" && typeof result?.protocolVersion === "string" ? `protocol ${result.protocolVersion}` : undefined;
+      const note =
+        f.method === "initialize" && typeof result?.protocolVersion === "string" ? `protocol ${result.protocolVersion}`
+        : f.method === "tools/list" && Array.isArray(result?.tools) ? `${result.tools.length} tools: ${(result.tools as Array<{ name: string }>).map((t) => t.name).join(", ")}`
+        : undefined;
       eventLog.update(f.row, {
         status: err || toolFailed ? "error" : "ok",
         ms: Math.round(performance.now() - f.t0),

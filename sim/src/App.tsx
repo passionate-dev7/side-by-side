@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Device, useSim } from "./Device";
 import { Handshake, Latency, WireLog } from "./Wire";
 import { sim, type HostMode, type SimState, type Theme } from "./sim";
@@ -117,6 +117,43 @@ function Composer({ state }: { state: SimState }) {
   );
 }
 
+/** Only appears when the MCP server is the Duffel emulator, which can play the airline. */
+function FixtureControl({ url }: { url: string }) {
+  const [on, setOn] = useState(false);
+  const [note, setNote] = useState("");
+  const origin = useMemo(() => {
+    try {
+      return new URL(url).origin;
+    } catch {
+      return null;
+    }
+  }, [url]);
+  useEffect(() => {
+    setOn(false);
+    if (!origin) return;
+    let live = true;
+    fetch(`${origin}/fixture`).then((r) => r.json()).then((b: { fixture?: boolean }) => live && setOn(b.fixture === true), () => live && setOn(false));
+    return () => void (live = false);
+  }, [origin]);
+  if (!on || !origin) return null;
+  return (
+    <div className="fixture" role="group" aria-label="Emulator control">
+      <span className="tagline">Test emulator, not an airline</span>
+      <button
+        type="button"
+        onClick={async () => {
+          const r = await fetch(`${origin}/fixture/airline-moves-seat`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+          const b = (await r.json()) as { moved?: string; from?: string | null; to?: string; error?: string };
+          setNote(r.ok ? `The emulated airline moved ${b.moved} from ${b.from ?? "no seat"} to ${b.to}. Now ask: are we still sitting together?` : (b.error ?? "The emulator refused."));
+        }}
+      >
+        Emulated airline moves a child
+      </button>
+      {note ? <span className="fixture-note" role="status">{note}</span> : null}
+    </div>
+  );
+}
+
 export function App() {
   const state = useSim();
   useEffect(() => {
@@ -124,13 +161,12 @@ export function App() {
     void sim.connect();
     return () => void sim.disconnect();
   }, []);
-  const toolNames = sim.tools.map((t) => t.name);
   return (
     <div className="shell">
       <header className="top">
         <div className="brand">
-          <h1>Side by Side</h1>
-          <span>Echo Show simulator</span>
+          <h1>Alexa+ simulator</h1>
+          <span>Plays the Alexa+ host for the Side by Side add-on. It is a simulator, not Alexa+.</span>
         </div>
         <ConnectionBar state={state} />
       </header>
@@ -140,12 +176,13 @@ export function App() {
           <Segmented<Theme> label="Device theme" value={state.theme} options={[["dark", "Dark"], ["light", "Light"]]} onPick={(t) => sim.setTheme(t)} />
           <Segmented<"on" | "off"> label="Spoken replies" value={state.muted ? "off" : "on"} options={[["on", "Sound on"], ["off", "Muted"]]} onPick={(v) => (v === "off") !== state.muted && sim.toggleMute()} />
         </div>
+        <FixtureControl url={state.url} />
         <Device state={state} />
         <Caption state={state} />
         <Composer state={state} />
       </main>
       <aside className="rail">
-        <Handshake conn={state.conn} llm={state.llm} toolNames={toolNames} />
+        <Handshake conn={state.conn} llm={state.llm} />
         <Latency />
         <WireLog />
       </aside>

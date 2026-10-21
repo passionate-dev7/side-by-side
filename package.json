@@ -8,7 +8,7 @@
   "scripts": {
     "dev:server": "npm run dev -w server",
     "dev:sim": "npm run dev -w sim",
-    "test": "npm test -w server",
+    "test": "npm test -w server && npm test -w sim",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w sim"
   }
 }

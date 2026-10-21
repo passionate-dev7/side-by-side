@@ -203,7 +203,7 @@ export function Device({ state }: { state: SimState }) {
         <div className={`lightbar ${lit}`} aria-hidden="true" />
       </div>
       <p className="device-note" aria-live="polite">
-        {mode === "voice-only" ? "Voice-only: no screen. The caption below is all there is." : `Display ${mode}, ${W} x ${H} canvas at ${scale.toFixed(2)}x`}
+        {mode === "voice-only" ? "Voice-only: no screen. The caption below is all there is." : `Simulated Echo Show. Display ${mode}, ${W} x ${H} canvas at ${scale.toFixed(2)}x`}
       </p>
     </div>
   );

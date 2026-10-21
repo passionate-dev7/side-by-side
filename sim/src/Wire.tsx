@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { eventLog, latencyOf, type LogRow } from "./log";
+import { eventLog, latencyOf, wireSteps, type LogRow } from "./log";
 import type { Conn, Llm } from "./sim";
 
 export const BUDGET_MS = 500;
@@ -19,11 +19,32 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function Handshake({ conn, llm, toolNames }: { conn: Conn; llm: Llm; toolNames: string[] }) {
+const STEP_LABEL = { initialize: "initialize", "notifications/initialized": "initialized", "tools/list": "tools/list", "tools/call": "tools/call" } as const;
+
+function Steps() {
+  const rows = useLog();
+  const steps = useMemo(() => wireSteps(rows), [rows]);
+  if (!steps.length) return <p className="quiet">No MCP traffic yet.</p>;
+  return (
+    <ol className="steps" aria-label="MCP handshake and tool calls">
+      {steps.map((s) => (
+        <li key={s.id} className={s.status}>
+          <span className="step-m">{STEP_LABEL[s.method]}</span>
+          <span className="step-s">{s.subject}</span>
+          <span className={`step-ms${s.method === "tools/call" && !s.formWait && (s.ms ?? 0) > BUDGET_MS ? " slow" : ""}`}>
+            {s.status === "pending" ? "..." : s.ms === undefined ? "" : s.formWait ? `${s.ms} ms with form` : `${s.ms} ms`}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+export function Handshake({ conn, llm }: { conn: Conn; llm: Llm }) {
   const ok = conn.status === "connected";
   return (
     <section className="panel" aria-label="Handshake">
-      <h2>Handshake</h2>
+      <h2>MCP handshake with the Side by Side server</h2>
       <dl className="stats">
         <Stat label="Protocol" value={ok ? (conn.protocolVersion ?? "") : "not negotiated"} />
         <Stat label="Server" value={ok ? `${conn.serverName}${conn.serverVersion ? ` ${conn.serverVersion}` : ""}` : "none"} />
@@ -31,7 +52,7 @@ export function Handshake({ conn, llm, toolNames }: { conn: Conn; llm: Llm; tool
         <Stat label="Session" value={ok && conn.sessionId ? `${conn.sessionId.slice(0, 8)}...` : ok ? "stateless" : "none"} />
         <Stat label="Model" value={llm.status === "ready" ? `${llm.provider} / ${llm.model}` : "unavailable"} />
       </dl>
-      {ok && toolNames.length ? <p className="toolnames">{toolNames.join("  ")}</p> : null}
+      <Steps />
     </section>
   );
 }
