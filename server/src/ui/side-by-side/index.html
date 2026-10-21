@@ -206,6 +206,14 @@ button:disabled { cursor: not-allowed; }
 .who .seatno.none { font-weight: 400; color: var(--muted); font-size: var(--fs-body); }
 .who .change { color: var(--muted); font-size: var(--fs-body); }
 .who .change b { color: var(--ink); font-weight: 600; }
+.who li.bad { color: var(--warn); }
+.who li.bad .change b { color: var(--warn); }
+.flag-row { display: flex; align-items: center; gap: var(--sp-5); }
+.flag-row .trav { width: auto; height: 48px; padding: 0 var(--sp-6); font-size: var(--fs-body); cursor: default; touch-action: auto; flex: none; }
+.flag-row .trav.is-flagged::after { top: -8px; right: -8px; }
+.flag-seat { font-size: var(--fs-lead); }
+.flag-seat b { font-weight: 600; color: var(--warn); }
+.ref-line b { color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
 .note { font-size: var(--fs-body); color: var(--muted); }
 .big { font-size: var(--fs-lead); line-height: 1.2; overflow-wrap: anywhere; }
 .code { font-size: var(--fs-label); color: var(--muted); letter-spacing: 0.04em; }

@@ -51,7 +51,12 @@ beforeAll(async () => {
           passengers: [{ id: "pas_a" }, { id: "pas_b" }],
           slices: [{ segments: [{ ...segment, passengers: [{ passenger_id: "pas_a", seat: { designator: "2A", disclosures: [], name: null } }, { passenger_id: "pas_b" }] }] }] } });
       }
-      if (path === "/air/airline_initiated_changes") return send(200, { data: [{ id: "aic_1", order_id: "ord_1", action_taken: null, created_at: "2026-10-22T00:00:00Z" }, { id: "aic_0", order_id: "ord_1", action_taken: "accepted", created_at: "2026-10-20T00:00:00Z" }] });
+      if (path === "/air/airline_initiated_changes") return send(200, { data: [{ id: "aic_1", order_id: "ord_1", action_taken: null, created_at: "2026-10-22T00:00:00Z",
+        removed: [{ segments: [{ ...segment, passengers: [{ passenger_id: "pas_a", seat: { designator: "2A" } }, { passenger_id: "pas_b", seat: { designator: "2B" } }] }] }],
+        added: [{ segments: [{ ...segment, departing_at: "2026-11-25T09:40:00", passengers: [{ passenger_id: "pas_a", seat: { designator: "2A" } }, { passenger_id: "pas_b", seat: { designator: "19F" } }] }] }] }, { id: "aic_2", order_id: "ord_1", action_taken: null, created_at: "2026-10-23T00:00:00Z",
+        removed: [{ segments: [{ ...segment, passengers: [{ passenger_id: "pas_a", seat: { designator: "2A" } }] }] }],
+        added: [{ segments: [{ ...segment, passengers: [{ passenger_id: "pas_a", seat: { designator: "3A" } }] }] }] },
+      { id: "aic_0", order_id: "ord_1", action_taken: "accepted", created_at: "2026-10-20T00:00:00Z" }] });
       return send(404, { meta: { status: 404, request_id: "r" }, errors: [{ type: "x", title: "x", message: `unrouted ${s.method} ${s.url}`, code: "not_found" }] });
     });
   });
@@ -121,7 +126,10 @@ describe("Duffel adapter over the real SDK", () => {
     const o = await port().getOrder("ord_1");
     expect(o.bookingReference).toBe("ABC123");
     expect(o.seats).toEqual({ pas_a: "2A", pas_b: null });
-    expect(o.pendingChanges).toEqual([{ id: "aic_1", createdAt: "2026-10-22T00:00:00Z" }]);
+    expect(o.pendingChanges).toEqual([
+      { id: "aic_1", createdAt: "2026-10-22T00:00:00Z", seatChanges: [{ passengerId: "pas_b", from: "2B", to: "19F" }], scheduleChanged: true },
+      { id: "aic_2", createdAt: "2026-10-23T00:00:00Z", seatChanges: [{ passengerId: "pas_a", from: "2A", to: "3A" }], scheduleChanged: false },
+    ]);
     expect(o.totalAmount).toBe(830);
   });
 });

@@ -1,5 +1,5 @@
 import { Duffel, DuffelError } from "@duffel/api";
-import type { AirlineInitiatedChange, Offer, Order, SeatMap } from "@duffel/api/types";
+import type { AirlineInitiatedChange, Offer, Order, OrderSlice, SeatMap } from "@duffel/api/types";
 
 /**
  * Duffel Flights API port. The adapter below uses the official @duffel/api SDK, so request and response shapes are
@@ -68,7 +68,17 @@ export interface OrderDetail {
   flightNumber: string | null;
   /** Duffel passenger id -> assigned seat designator, null when the airline has not assigned one. */
   seats: Record<string, string | null>;
-  pendingChanges: Array<{ id: string; createdAt: string }>;
+  /** Airline-initiated changes the traveler has not answered yet, with the seat moves each one carries. */
+  pendingChanges: PendingChange[];
+}
+
+export interface PendingChange {
+  id: string;
+  createdAt: string;
+  /** Per passenger, the seat before and after the airline's change (null = no seat). Only passengers whose seat differs. */
+  seatChanges: Array<{ passengerId: string; from: string | null; to: string | null }>;
+  /** True when a segment's departure or arrival time differs between the removed and added itinerary. */
+  scheduleChanged: boolean;
 }
 
 export interface DuffelPort {
@@ -140,6 +150,21 @@ function seatsOf(order: Order): Record<string, string | null> {
     for (const sp of seg.passengers) if (sp.passenger_id) out[sp.passenger_id] = sp.seat?.designator ?? null;
   }
   return out;
+}
+
+function seatsBySlices(slices: OrderSlice[]): Map<string, string | null> {
+  const out = new Map<string, string | null>();
+  for (const sl of slices) for (const seg of sl.segments) for (const p of seg.passengers) if (p.passenger_id) out.set(p.passenger_id, p.seat?.designator ?? null);
+  return out;
+}
+
+/** Reads what an airline-initiated change does to seats and times from its removed (before) and added (after) itineraries. */
+export function pendingChangeOf(c: AirlineInitiatedChange): PendingChange {
+  const before = seatsBySlices(c.removed ?? []);
+  const after = seatsBySlices(c.added ?? []);
+  const seatChanges = [...after].filter(([pid, to]) => (before.get(pid) ?? null) !== to).map(([passengerId, to]) => ({ passengerId, from: before.get(passengerId) ?? null, to }));
+  const times = (slices: OrderSlice[]) => slices.flatMap((sl) => sl.segments.map((s) => `${s.departing_at}>${s.arriving_at}`)).join("|");
+  return { id: c.id, createdAt: c.created_at, seatChanges, scheduleChanged: times(c.removed ?? []) !== times(c.added ?? []) };
 }
 
 export function createDuffelPort(token: string, basePath?: string): DuffelPort {
@@ -216,7 +241,7 @@ export function createDuffelPort(token: string, basePath?: string): DuffelPort {
           departingAt: seg.departing_at,
           flightNumber: `${seg.marketing_carrier.iata_code}${seg.marketing_carrier_flight_number}`,
           seats: seatsOf(o),
-          pendingChanges: changes.filter((c) => c.action_taken === null).map((c) => ({ id: c.id, createdAt: c.created_at })),
+          pendingChanges: changes.filter((c) => c.action_taken === null).map(pendingChangeOf),
         };
       } catch (e) {
         return wrap(e);

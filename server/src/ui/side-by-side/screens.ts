@@ -86,22 +86,48 @@ export function bookedScreen(v: BookedView): HTMLElement {
   );
 }
 
+function statusTitle(v: StatusView): string {
+  if (v.affected.length) return `${v.affected.map((a) => a.name).join(" and ")} ${v.affected.length > 1 ? "are" : "is"} no longer beside an adult`;
+  if (v.together) return v.changes.length ? "Still together, seats moved" : "Still sitting together";
+  return v.seats.some((s) => !s.seat) ? "Seats not assigned yet" : "Your seats changed";
+}
+
+function reseatLine(v: StatusView): string {
+  const r = v.reseat;
+  const who = v.airline.name;
+  if (!r) return `Checked ${checkedAt(v.checkedAt)}`;
+  if (r.status === "unavailable") return `${r.reason} Ask ${who} to seat ${v.affected.map((a) => a.name).join(" and ")} beside an adult.`;
+  const moves = r.moves.map((m) => `${m.name} to ${m.to}`).join(", ");
+  return r.guaranteeApplies ? `Proposed: ${moves}. ${who} commits to this at no fee. Ask them to make the change.` : `Proposed: ${moves}${r.fee > 0 ? `, ${money(r.fee, r.currency)} in seat fees` : ", no seat fee"}. Ask ${who} to make the change.`;
+}
+
 export function statusScreen(v: StatusView): HTMLElement {
-  const moved = v.changes.length > 0;
-  const title = v.together ? "Still sitting together" : "Your seats changed";
-  const list = moved
-    ? v.changes.map((c) => h("li", {}, h("span", {}, c.name), h("span", { class: "change" }, c.from ?? "No seat", " to ", h("b", {}, c.to ?? "no seat"))))
-    : v.seats.map((s) => seatItem(s.name, s.seat));
+  const bad = new Set(v.affected.map((a) => a.name));
+  const moved = new Map(v.changes.map((c) => [c.name, c]));
+  const rows = v.seats.map((s) => {
+    const c = moved.get(s.name);
+    const flagged = bad.has(s.name);
+    return h(
+      "li",
+      { class: flagged ? "bad" : c ? "moved" : "" },
+      h("span", {}, s.name),
+      c ? h("span", { class: "change" }, c.from ?? "No seat", " to ", h("b", {}, c.to ?? "none")) : s.seat ? h("span", { class: "seatno" }, s.seat) : h("span", { class: "seatno none" }, "No seat yet"),
+    );
+  });
+  const left = v.affected.length
+    ? h(
+        "div",
+        { class: "stack" },
+        h("div", { class: "label" }, "Needs an adult beside them"),
+        ...v.affected.map((a) => h("div", { class: "flag-row" }, h("span", { class: "trav is-child is-flagged" }, h("span", { class: "nm" }, a.name)), h("span", { class: "flag-seat" }, a.from ?? "No seat", " to ", h("b", {}, a.seat ?? "none")))),
+        h("div", { class: "label ref-line" }, `${v.airline.name} · booking `, h("b", {}, v.bookingReference)),
+      )
+    : h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, v.changes.length ? "Seat changes since you booked" : "No seat changes since you booked"));
   return screen(
     "together-status",
-    head(title, [v.together ? chip("ok", "Together", true) : chip("warn", "Not together", true), sourceTag(v.provenance)]),
-    h(
-      "section",
-      { class: "split" },
-      h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, moved ? "Seat changes since you booked" : "No seat changes since you booked")),
-      h("ul", { class: "who", "aria-label": moved ? "Seat changes" : "Seats by traveler" }, ...list),
-    ),
-    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, `Checked ${checkedAt(v.checkedAt)}`), provenanceStrip(v.provenance)),
+    head(statusTitle(v), [v.together ? chip("ok", "Together", true) : chip("warn", "Not together", true), sourceTag(v.provenance)]),
+    h("section", { class: "split" }, left, h("ul", { class: "who", "aria-label": v.changes.length ? "Seats, with changes" : "Seats by traveler" }, ...rows)),
+    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, reseatLine(v)), provenanceStrip(v.provenance)),
   );
 }
 

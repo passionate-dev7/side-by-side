@@ -1,5 +1,5 @@
 import type { SeatMap } from "@duffel/api/types";
-import { DuffelApiError, type DuffelPort, type OfferSummary, type OrderDetail, type OrderPassengerInput, type SearchRequest } from "../../src/duffel.js";
+import { DuffelApiError, type DuffelPort, type OfferSummary, type OrderDetail, type PendingChange, type OrderPassengerInput, type SearchRequest } from "../../src/duffel.js";
 import { makeSeatMap } from "./seatmap.js";
 
 /**
@@ -24,7 +24,7 @@ interface FakeOrder {
   offerId: string;
   seats: Record<string, string | null>;
   total: number;
-  pendingChanges: Array<{ id: string; createdAt: string }>;
+  pendingChanges: PendingChange[];
   confirmAfterPolls: number;
   polls: number;
 }
@@ -242,7 +242,14 @@ export class FakeDuffel implements DuffelPort {
   /** Simulates an airline-initiated change: the carrier reassigns a seat after booking. */
   airlineMovesSeat(orderId: string, passengerId: string, newSeat: string) {
     const ord = this.orders.get(orderId)!;
+    const from = ord.seats[passengerId] ?? null;
     ord.seats[passengerId] = newSeat;
-    ord.pendingChanges.push({ id: `aic_${++this.seq}`, createdAt: NOW.toISOString() });
+    ord.pendingChanges.push({ id: `aic_${++this.seq}`, createdAt: NOW.toISOString(), seatChanges: [{ passengerId, from, to: newSeat }], scheduleChanged: false });
+  }
+
+  /** The airline records a change but the order's seats still read the old ones until the change is accepted. */
+  airlineProposesSeat(orderId: string, passengerId: string, newSeat: string) {
+    const ord = this.orders.get(orderId)!;
+    ord.pendingChanges.push({ id: `aic_${++this.seq}`, createdAt: NOW.toISOString(), seatChanges: [{ passengerId, from: ord.seats[passengerId] ?? null, to: newSeat }], scheduleChanged: false });
   }
 }

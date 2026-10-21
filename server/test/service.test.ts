@@ -493,9 +493,89 @@ describe("still_together (a new session, state read from the store)", () => {
     fake.airlineMovesSeat(booked.orderId, mia, "30F");
     const no = await stillTogether(ctx);
     expect(no.together).toBe(false);
-    expect(no.changes).toEqual([{ name: "Mia", from, to: "30F" }]);
+    expect(no.changes).toEqual([{ name: "Mia", from, to: "30F", via: ["order", "airline-change"] }]);
     expect(no.voice).toMatch(/^No\. Mia moved from .* to 30F\. Mia is no longer beside an adult/);
     expect(no.voice).toMatch(/waiting for your response/);
+  });
+
+  async function bookedDelta() {
+    await searched();
+    await showSeats(ctx, "off_delta");
+    const booked = await bookTogether(ctx, { offerId: "off_delta", confirmed: true }, null);
+    const stored = ctx.store.getOrder("default", booked.orderId)!;
+    return { booked, stored, seat: (name: string) => booked.seats.find((s) => s.name === name)!.seat!, pid: (id: string) => stored.passengerIds[id] };
+  }
+
+  it("airline moves a child away: the view names the child, her old and new seat, and offers seats that put her beside an adult again", async () => {
+    const { booked, seat, pid } = await bookedDelta();
+    fake.airlineMovesSeat(booked.orderId, pid("mia"), "30F");
+    const s = await stillTogether(ctx);
+    expect(s.together).toBe(false);
+    expect(s.provenance).toMatchObject({ source: "fixture", offer: "test", booking: { mode: "test", placed: true } });
+    expect(s.affected).toEqual([{ name: "Mia", role: "child", seat: "30F", from: seat("Mia"), reason: "Seat 30F has no adult beside it." }]);
+    expect(s.changes).toEqual([{ name: "Mia", from: seat("Mia"), to: "30F", via: ["order", "airline-change"] }]);
+    expect(s.seats.find((x) => x.name === "Mia")!.seat).toBe("30F");
+    expect(s.airlineChanges).toEqual({ open: 1, scheduleChanged: false });
+    expect(s.reseat).toMatchObject({ status: "proposal", guaranteeApplies: false });
+    const offer = s.reseat;
+    if (offer?.status !== "proposal") throw new Error("expected a proposal");
+    expect(offer.moves).toHaveLength(1);
+    expect(offer.moves[0]).toMatchObject({ name: "Mia", from: "30F" });
+    // the proposed seat really puts every child beside an adult on the airline's own seat map
+    const grid = buildGrid(fake.offers.get("off_delta")!.map);
+    const members = ctx.store.getFamily("default")!.members;
+    const party = members.map((m, i) => ({ id: m.id, passengerId: `pas_${i}`, age: m.age }));
+    const after = members.map((m) => ({ memberId: m.id, seat: m.name === "Mia" ? offer.moves[0].to : seat(m.name) }));
+    expect(evaluateAssignment(grid, party, after, { adjacencyOnly: true }).together).toBe(true);
+    expect(s.voice).toMatch(/^No\. Mia moved from \S+ to 30F\. Mia is no longer beside an adult\. I can see seats that put everyone together again: Mia to \S+\./);
+    expect(s.voice).toMatch(/Ask Delta to make that change\./);
+    expect(s.voice).toMatch(/Delta sent a change to your booking and is waiting for your response\./);
+  });
+
+  it("control: the airline swaps two parents and the children still have an adult beside them, so nothing is flagged", async () => {
+    const { booked, seat, pid } = await bookedDelta();
+    fake.airlineMovesSeat(booked.orderId, pid("dad"), seat("Mum"));
+    fake.airlineMovesSeat(booked.orderId, pid("mum"), seat("Dad"));
+    const s = await stillTogether(ctx);
+    expect(s.together).toBe(true);
+    expect(s.affected).toEqual([]);
+    expect(s.reseat).toBeNull();
+    expect(s.changes.map((c) => c.name).sort()).toEqual(["Dad", "Mum"]);
+    expect(s.voice).toMatch(/^Yes, you are still sitting together, although seats moved/);
+  });
+
+  it("a change the airline has proposed but the order does not show yet still flags the child, and says it is a pending change", async () => {
+    const { booked, seat, pid } = await bookedDelta();
+    fake.airlineProposesSeat(booked.orderId, pid("leo"), "30A");
+    const s = await stillTogether(ctx);
+    expect(fake.orders.get(booked.orderId)!.seats[pid("leo")]).toBe(seat("Leo"));
+    expect(s.together).toBe(false);
+    expect(s.affected.map((a) => a.name)).toEqual(["Leo"]);
+    expect(s.changes).toEqual([{ name: "Leo", from: seat("Leo"), to: "30A", via: ["airline-change"] }]);
+  });
+
+  it("when the airline's seat map no longer answers, it says so and still names the child and who to ask", async () => {
+    const { booked, pid } = await bookedDelta();
+    fake.airlineMovesSeat(booked.orderId, pid("mia"), "30F");
+    fake.noSeatMap.add("off_delta");
+    const s = await stillTogether(ctx);
+    expect(s.affected.map((a) => a.name)).toEqual(["Mia"]);
+    expect(s.reseat).toEqual({ status: "unavailable", reason: "Delta no longer shows a seat map for this booking." });
+    expect(s.voice).toMatch(/Delta no longer shows a seat map for this booking\. Ask Delta to seat Mia beside an adult\./);
+  });
+
+  it("under a carrier that guarantees adjacent seats the offer says the commitment covers it at no fee", async () => {
+    await searched();
+    await showSeats(ctx, "off_jetblue");
+    const booked = await bookTogether(ctx, { offerId: "off_jetblue", confirmed: true }, null);
+    const stored = ctx.store.getOrder("default", booked.orderId)!;
+    // JetBlue assigns seats after booking, and puts Mia away from every adult
+    Object.assign(fake.orders.get(booked.orderId)!.seats, { [stored.passengerIds.dad]: "12A", [stored.passengerIds.mum]: "12B", [stored.passengerIds.leo]: "12C", [stored.passengerIds.mia]: "28F" });
+    const s = await stillTogether(ctx);
+    expect(s.affected.map((a) => a.name)).toEqual(["Mia"]);
+    expect(s.reseat).toMatchObject({ status: "proposal", guaranteeApplies: true });
+    expect(s.voice).toMatch(/JetBlue's family seating commitment covers a child beside an adult at no fee, so ask them to make that change\./);
+    expect(s.voice).not.toMatch(/seat fees/);
   });
 
   it("an order under the airline guarantee with no seats yet is not reported as together", async () => {

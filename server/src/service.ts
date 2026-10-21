@@ -8,8 +8,11 @@ import type {
   FareComparison,
   FareRow,
   NoAdjacentSeats,
+  AffectedTraveler,
   OfferCard,
   OffersView,
+  Reseat,
+  SeatChange,
   Provenance,
   SeatMapView,
   StatusView,
@@ -686,6 +689,35 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
 // ---------------------------------------------------------------------------------------------------------------
 // still_together
 
+/** Seats of a booked order's seat map that let the whole family sit together again, keeping what they already hold at no cost. */
+async function proposeReseat(ctx: Ctx, stored: BookedOrder, current: Record<string, string | null>, currency: string): Promise<Reseat> {
+  const duffel = duffelOrThrow(ctx);
+  let raw: SeatMap[];
+  try {
+    raw = await duffel.seatMaps(stored.offerId);
+  } catch (e) {
+    if (e instanceof DuffelApiError) return { status: "unavailable", reason: `${stored.airline.name} did not return its seat map for this booking (${e.code}).` };
+    throw e;
+  }
+  const map = raw[0];
+  if (!map) return { status: "unavailable", reason: `${stored.airline.name} no longer shows a seat map for this booking.` };
+  const grid = buildGrid(map);
+  const party: PartyMember[] = stored.members.map((m) => ({ id: m.id, passengerId: stored.passengerIds[m.id], age: m.age }));
+  for (const m of stored.members) {
+    const held = current[m.id];
+    const seat = held ? grid.seats.get(held) : undefined;
+    if (seat) seat.fees.set(stored.passengerIds[m.id], 0);
+  }
+  const sol = solveSeating(grid, party);
+  if (sol.status !== "TOGETHER") return { status: "unavailable", reason: "No open seats on this flight put every child beside an adult." };
+  const nameOf = new Map(stored.members.map((m) => [m.id, m.name]));
+  const moves = sol.assignments
+    .filter((a) => a.seat !== current[a.memberId])
+    .map((a) => ({ name: nameOf.get(a.memberId)!, from: current[a.memberId] ?? null, to: a.seat, fee: a.fee / 100 }));
+  const fee = Math.round(moves.reduce((t, m) => t + m.fee, 0) * 100) / 100;
+  return { status: "proposal", moves, fee, currency, guaranteeApplies: dotFeeFreeAdjacent(stored.airline.iata) === true };
+}
+
 export async function stillTogether(ctx: Ctx, orderId?: string): Promise<StatusView> {
   const duffel = duffelOrThrow(ctx);
   const stored = orderId ? ctx.store.getOrder(ctx.account, orderId) : ctx.store.latestOrder(ctx.account);
@@ -693,12 +725,24 @@ export async function stillTogether(ctx: Ctx, orderId?: string): Promise<StatusV
 
   const detail = await wrapDuffel(duffel.getOrder(stored.orderId));
   const party: PartyMember[] = stored.members.map((m) => ({ id: m.id, passengerId: stored.passengerIds[m.id], age: m.age }));
-  const current: Record<string, string | null> = {};
-  for (const m of stored.members) current[m.id] = detail.seats[stored.passengerIds[m.id]] ?? null;
 
-  const changes = stored.members
-    .filter((m) => (stored.seats[m.id] ?? null) !== current[m.id])
-    .map((m) => ({ name: m.name, from: stored.seats[m.id] ?? null, to: current[m.id] }));
+  // What the airline says now. An unanswered airline-initiated change that moves a seat counts as the airline's decision.
+  const proposed = new Map<string, { from: string | null; to: string | null }>();
+  for (const ch of detail.pendingChanges) for (const sc of ch.seatChanges) proposed.set(sc.passengerId, { from: sc.from, to: sc.to });
+  const current: Record<string, string | null> = {};
+  for (const m of stored.members) {
+    const pid = stored.passengerIds[m.id];
+    current[m.id] = proposed.has(pid) ? proposed.get(pid)!.to : (detail.seats[pid] ?? null);
+  }
+
+  const changes: SeatChange[] = [];
+  for (const m of stored.members) {
+    const pid = stored.passengerIds[m.id];
+    const via: SeatChange["via"] = [];
+    if ((stored.seats[m.id] ?? null) !== (detail.seats[pid] ?? null)) via.push("order");
+    if (proposed.has(pid) && (stored.seats[m.id] ?? null) !== proposed.get(pid)!.to) via.push("airline-change");
+    if (via.length) changes.push({ name: m.name, from: stored.seats[m.id] ?? null, to: current[m.id], via });
+  }
 
   const unassigned = stored.members.filter((m) => current[m.id] === null);
   const grid = gridFromLayout(stored.layout);
@@ -708,27 +752,48 @@ export async function stillTogether(ctx: Ctx, orderId?: string): Promise<StatusV
 
   const seats = stored.members.map((m) => ({ name: m.name, seat: current[m.id] }));
   const nameOf = new Map(stored.members.map((m) => [m.id, m.name]));
+  const byId = new Map(stored.members.map((m) => [m.id, m]));
+  const affected: AffectedTraveler[] = ev.violations
+    .filter((v) => v.reason.includes("no adult"))
+    .map((v) => ({ name: nameOf.get(v.memberId)!, role: toTraveler(byId.get(v.memberId)!).role, seat: current[v.memberId], from: stored.seats[v.memberId] ?? null, reason: v.reason }));
+
+  const reseat = !together && unassigned.length === 0 && affected.length ? await proposeReseat(ctx, stored, current, detail.currency) : null;
+  const airlineChanges = { open: detail.pendingChanges.length, scheduleChanged: detail.pendingChanges.some((c) => c.scheduleChanged) };
+
   let voice: string;
   if (unassigned.length) {
     voice = `${stored.airline.name} has not assigned seats yet for ${unassigned.map((m) => m.name).join(" and ")}. ${stored.strategy === "airline-guarantee" ? `Under its family seating policy it must seat a child beside an adult at no fee, and I will check again.` : "I will check again."}`;
   } else if (together) {
     voice = changes.length ? `Yes, you are still sitting together, although seats moved: ${changes.map((c) => `${c.name} ${c.from ?? "none"} to ${c.to}`).join(", ")}.` : `Yes. ${seatList(seats)}. Nothing has changed.`;
   } else {
-    const alone = ev.violations.filter((v) => v.reason.includes("no adult")).map((v) => nameOf.get(v.memberId));
-    voice = `No. ${changes.map((c) => `${c.name} moved from ${c.from ?? "none"} to ${c.to}`).join(", ")}.${alone.length ? ` ${alone.join(" and ")} ${alone.length > 1 ? "are" : "is"} no longer beside an adult.` : ""} Want me to find seats that are adjacent?`;
+    const alone = affected.map((a) => a.name);
+    voice = `No. ${changes.map((c) => `${c.name} moved from ${c.from ?? "none"} to ${c.to}`).join(", ")}.${alone.length ? ` ${alone.join(" and ")} ${alone.length > 1 ? "are" : "is"} no longer beside an adult.` : ""}`;
+    if (reseat?.status === "proposal") {
+      const how = reseat.moves.map((m) => `${m.name} to ${m.to}`).join(", ");
+      voice += ` I can see seats that put everyone together again: ${how}. ${
+        reseat.guaranteeApplies
+          ? `${stored.airline.name}'s family seating commitment covers a child beside an adult at no fee, so ask them to make that change.`
+          : `${reseat.fee > 0 ? `That is ${money(reseat.fee, reseat.currency)} in seat fees. ` : "There is no seat fee. "}Ask ${stored.airline.name} to make that change.`
+      }`;
+    } else if (reseat) {
+      voice += ` ${reseat.reason} Ask ${stored.airline.name} to seat ${affected.map((a) => a.name).join(" and ")} beside an adult.`;
+    }
   }
-  if (detail.pendingChanges.length) voice += ` ${stored.airline.name} also changed the itinerary and is waiting for your response.`;
+  if (airlineChanges.open) voice += ` ${stored.airline.name} ${airlineChanges.scheduleChanged ? "also changed the itinerary and" : "sent a change to your booking and"} is waiting for your response.`;
 
   return {
     kind: "together-status",
     orderId: stored.orderId,
     bookingReference: stored.bookingReference,
+    airline: airlineInfo(stored.airline),
     together,
     seats,
     changes,
+    affected,
+    reseat,
+    airlineChanges,
     checkedAt: ctx.now().toISOString(),
     provenance: provenanceOf(ctx, stored.airline.iata, detail.liveMode, true),
     voice,
   };
 }
-

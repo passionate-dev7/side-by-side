@@ -180,13 +180,44 @@ export interface BookedView {
   voice: string;
 }
 
+export interface SeatChange {
+  name: string;
+  from: string | null;
+  to: string | null;
+  /** "order": the order's seats differ from those booked. "airline-change": an unanswered airline-initiated change record carries the move. */
+  via: Array<"order" | "airline-change">;
+}
+
+/** A traveler who needs an adult beside them and no longer has one. */
+export interface AffectedTraveler {
+  name: string;
+  role: Role;
+  seat: string | null;
+  /** Where they sat when booked. */
+  from: string | null;
+  reason: string;
+}
+
+/**
+ * Offer to seat the family together again, computed from the airline's seat map for the booked offer when it still answers.
+ * The family's own seats cost nothing to keep. A proposal is not a purchase.
+ */
+export type Reseat =
+  | { status: "proposal"; moves: Array<{ name: string; from: string | null; to: string; fee: number }>; fee: number; currency: string; guaranteeApplies: boolean }
+  | { status: "unavailable"; reason: string };
+
 export interface StatusView {
   kind: "together-status";
   orderId: string;
   bookingReference: string;
+  airline: AirlineInfo;
   together: boolean;
   seats: Array<{ name: string; seat: string | null }>;
-  changes: Array<{ name: string; from: string | null; to: string | null }>;
+  changes: SeatChange[];
+  affected: AffectedTraveler[];
+  reseat: Reseat | null;
+  /** Airline-initiated changes still waiting for the traveler's answer. */
+  airlineChanges: { open: number; scheduleChanged: boolean };
   checkedAt: string;
   provenance: Provenance;
   voice: string;
