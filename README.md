@@ -58,8 +58,24 @@ The Echo Show client's tool-choosing model is configured by environment variable
 npm test                          # server integration, solver, service, DOT table and lint tests, plus the Echo Show client's wire, spoken-text and demo-plan tests
 npm run lint:tools -w server      # exits 1 on a poisoned tool description
 npm run lint:tools -w server -- --plant   # plants one, exits 1
-npx tsx spikes/seats/spike.ts     # prints the together-price table and latency against Alexa's 500 ms budget
+SPIKE_RUNS=5 npx tsx --env-file=.env spikes/seats/spike.ts   # live: together-price table, first-answer latency and time to completion per tool, over 5 runs
 ```
+
+## Answers inside Alexa's 500 ms
+
+Every tool answers in about 200 ms against live Duffel, and the airline's seconds land in the background. Measured over 5 live runs (`spikes/seats/results.json`):
+
+| Tool | First answer p50 / p95 | Work behind it completes |
+|---|---|---|
+| `find_family_flights` | 204 / 213 ms | ranking complete in 2.2 s p50, 3.7 s p95 |
+| `book_together` | 209 / 217 ms | reference issued in 2.8 s p50, 4.3 s p95 |
+| `still_together` | 204 / 205 ms | fresh reading in 0.71 s |
+| `save_family`, `show_seats`, `move_traveler` | 3 ms or less p50, 10 ms p95 | |
+
+- Seat maps for the cheapest fares are read in parallel under a concurrency cap while the search runs. The first answer carries the best ranked offers that are ready; the Echo Show fills in as the rest land, and asking again returns the same search.
+- `book_together` answers with a booking state and finishes the order in the background. Asking again returns that booking, never a second order. The live seat map is read once more after the family says yes, and a total that moved since they agreed is never charged.
+- `still_together` returns the last reading with its age while a fresh one is read, and every call in flight shares one read of the order.
+- A cached seat map prices only while its offer is unexpired and younger than five minutes.
 
 ## How the numbers are made
 

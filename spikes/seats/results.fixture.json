@@ -1,7 +1,7 @@
 {
   "mode": "FIXTURE (strict fake Duffel, not Duffel inventory)",
   "command": "npx tsx spikes/seats/spike.ts --fixture",
-  "ranAt": "2026-10-21T06:58:25.434Z",
+  "ranAt": "2026-10-21T12:02:58.020Z",
   "departure": "2026-11-25",
   "protocolVersion": {
     "name": "side-by-side",
@@ -15,6 +15,7 @@
     "medianTogetherTotalMinusCheapestFare": 90,
     "cheapestTogetherTotalMinusCheapestFare": 52
   },
+  "runs": 1,
   "latencyMs": {
     "save_family": {
       "n": 1,
@@ -24,8 +25,8 @@
     },
     "find_family_flights": {
       "n": 1,
-      "p50": 17,
-      "p95": 17,
+      "p50": 20,
+      "p95": 20,
       "under500msBudget": true
     },
     "show_seats": {
@@ -37,25 +38,26 @@
     "move_traveler": {
       "n": 6,
       "p50": 1,
-      "p95": 10,
+      "p95": 9,
       "under500msBudget": true
     },
     "book_together": {
       "n": 3,
       "p50": 1,
-      "p95": 12,
+      "p95": 14,
       "under500msBudget": true
     },
     "still_together": {
-      "n": 1,
-      "p50": 1,
-      "p95": 1,
+      "n": 2,
+      "p50": 2,
+      "p95": 2,
       "under500msBudget": true
     }
   },
+  "settleMs": {},
   "checks": [
     {
-      "name": "search returned ranked offers",
+      "name": "search ranked offers (first answer ready)",
       "pass": true,
       "detail": "4 ranked of 4 searched, testMode=true"
     },
@@ -65,7 +67,7 @@
       "detail": "Dad moved to an aisle seat"
     },
     {
-      "name": "order reached a booking reference",
+      "name": "order reached a booking reference (first answer confirmed)",
       "pass": true,
       "detail": "booked FXT4KQ"
     },
@@ -75,7 +77,7 @@
       "detail": "seats {\"pas_0\":\"12D\",\"pas_1\":\"12B\",\"pas_2\":\"12A\",\"pas_3\":\"12C\"}"
     },
     {
-      "name": "still_together agrees",
+      "name": "still_together agrees (first answer fresh)",
       "pass": true,
       "detail": "Yes. Dad 12D, Mum 12B, Mia 12A, Leo 12C. Nothing has changed."
     },

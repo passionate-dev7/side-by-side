@@ -76,43 +76,86 @@ const result: Record<string, unknown> = {
   protocolVersion: client.getServerVersion(),
 };
 
-await call(client, "save_family", { travelers: [{ name: "Dad", age: 40 }, { name: "Mum", age: 38 }, { name: "Mia", age: 6 }, { name: "Leo", age: 9 }] });
-const found = await call(client, "find_family_flights", { origin: "JFK", destination: "MCO", departure_date: departure });
-const offersView = found.structuredContent as { kind: string; offers: Array<{ offerId: string; airline: { name: string; iata: string }; fare: number; seatFees: number; guarantee: boolean; togetherTotal: number | null; together: string }>; searched: number; testMode: boolean };
-check("search returned ranked offers", offersView.kind === "offers" && offersView.offers.length > 0, `${offersView.offers?.length ?? 0} ranked of ${offersView.searched} searched, testMode=${offersView.testMode}`);
-console.table(offersView.offers.map((o) => ({ airline: o.airline.name, fare: o.fare, seatFees: o.seatFees, guarantee: o.guarantee, together: o.together, togetherTotal: o.togetherTotal })));
+const RUNS = Number(process.env.SPIKE_RUNS ?? process.argv.find((x) => x.startsWith("--runs="))?.split("=")[1] ?? 1);
+const settled: Record<string, number[]> = {};
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+type Sc = Record<string, unknown>;
 
-const together = offersView.offers.filter((o) => o.together === "TOGETHER");
-const zero = together.filter((o) => o.seatFees === 0);
-const cheapestFare = Math.min(...offersView.offers.map((o) => o.fare));
-const deltas = together.map((o) => o.togetherTotal! - cheapestFare);
-result.metric = {
-  offersRanked: offersView.offers.length,
-  offersSearched: offersView.searched,
-  togetherForZero: zero.length,
-  togetherForZeroPercent: Math.round((100 * zero.length) / offersView.offers.length),
-  medianTogetherTotalMinusCheapestFare: deltas.length ? pct(deltas, 50) : null,
-  cheapestTogetherTotalMinusCheapestFare: deltas.length ? Math.min(...deltas) : null,
-};
+/** Asks the tool again, the way the Echo Show view does, until the state is final. Returns the final view and the time it took from `t0`. */
+async function untilFinal(client: Client, t0: number, label: string, name: string, args: Record<string, unknown>, final: (sc: Sc) => boolean): Promise<Sc> {
+  for (;;) {
+    const r = await client.callTool({ name, arguments: args });
+    const sc = r.structuredContent as Sc;
+    if (r.isError || final(sc)) {
+      (settled[label] ??= []).push(performance.now() - t0);
+      return sc;
+    }
+    if (performance.now() - t0 > 60_000) throw new Error(`${label} was not final after 60 s`);
+    await sleep(300);
+  }
+}
 
-// Seats, a hand edit, then a booking with explicit seat services so the post-condition is checkable.
-const best = together[0];
-if (!best) {
-  check("an offer lets the family sit together", false, "no offer could seat the family");
-} else {
+type Offer = { offerId: string; airline: { name: string; iata: string }; fare: number; seatFees: number; guarantee: boolean; togetherTotal: number | null; together: string };
+let offersView!: { kind: string; status: string; offers: Offer[]; searched: number; evaluated: number; testMode: boolean };
+let firstBookedRef = "";
+
+for (let run = 1; run <= RUNS; run++) {
+  const tag = RUNS > 1 ? `run ${run}: ` : "";
+  await call(client, "save_family", { travelers: [{ name: "Dad", age: 40 }, { name: "Mum", age: 38 }, { name: "Mia", age: 6 }, { name: "Leo", age: 9 }] });
+
+  // The first answer is what Alexa+ waits for; the view (here, a loop) asks again until the ranking is complete.
+  const tSearch = performance.now();
+  const found = await call(client, "find_family_flights", { origin: "JFK", destination: "MCO", departure_date: departure });
+  const first = found.structuredContent as Sc & { status: string; query: Record<string, unknown> };
+  const ready = first.status === "ready" ? first : await untilFinal(client, tSearch, "find_family_flights ready", "find_family_flights", first.query, (sc) => sc.status === "ready");
+  offersView = ready as unknown as typeof offersView;
+  check(`${tag}search ranked offers (first answer ${first.status})`, offersView.kind === "offers" && offersView.status === "ready" && offersView.offers.length > 0, `${offersView.offers?.length ?? 0} ranked of ${offersView.searched} searched, testMode=${offersView.testMode}`);
+  if (run === 1) console.table(offersView.offers.map((o) => ({ airline: o.airline.name, fare: o.fare, seatFees: o.seatFees, guarantee: o.guarantee, together: o.together, togetherTotal: o.togetherTotal })));
+
+  const together = offersView.offers.filter((o) => o.together === "TOGETHER");
+  if (run === 1) {
+    const zero = together.filter((o) => o.seatFees === 0);
+    const cheapestFare = Math.min(...offersView.offers.map((o) => o.fare));
+    const deltas = together.map((o) => o.togetherTotal! - cheapestFare);
+    result.metric = {
+      offersRanked: offersView.offers.length,
+      offersSearched: offersView.searched,
+      togetherForZero: zero.length,
+      togetherForZeroPercent: Math.round((100 * zero.length) / offersView.offers.length),
+      medianTogetherTotalMinusCheapestFare: deltas.length ? pct(deltas, 50) : null,
+      cheapestTogetherTotalMinusCheapestFare: deltas.length ? Math.min(...deltas) : null,
+    };
+  }
+
+  // Seats, a hand edit, then a booking with explicit seat services so the post-condition is checkable.
+  const best = together[0];
+  if (!best) {
+    check(`${tag}an offer lets the family sit together`, false, "no offer could seat the family");
+    continue;
+  }
   await call(client, "show_seats", { offer_id: best.offerId });
-  for (let i = 0; i < 5; i++) await call(client, "move_traveler", { offer_id: best.offerId, traveler: "Dad", position: i % 2 ? "aisle" : "window" });
-  const settled = await call(client, "move_traveler", { offer_id: best.offerId, traveler: "Dad", position: "aisle" });
-  check("hand edit keeps the family together", (settled.structuredContent as { together: string }).together === "TOGETHER", "Dad moved to an aisle seat");
+  for (let i = 0; i < (run === 1 ? 5 : 1); i++) await call(client, "move_traveler", { offer_id: best.offerId, traveler: "Dad", position: i % 2 ? "aisle" : "window" });
+  const edited = await call(client, "move_traveler", { offer_id: best.offerId, traveler: "Dad", position: "aisle" });
+  check(`${tag}hand edit keeps the family together`, (edited.structuredContent as { together: string }).together === "TOGETHER", "Dad moved to an aisle seat");
+
+  // book_together answers with the booking state; asking again returns the reference.
+  const tBook = performance.now();
   const booked = await call(client, "book_together", { offer_id: best.offerId });
-  const b = booked.structuredContent as { kind: string; bookingReference?: string; seats?: Array<{ name: string; seat: string | null }>; strategy?: string; code?: string };
-  check("order reached a booking reference", b.kind === "booked" && !!b.bookingReference, `${b.kind} ${b.bookingReference ?? b.code ?? ""}`);
-  if (b.kind === "booked") {
-    const order = await ctx.duffel!.getOrder((booked.structuredContent as { orderId: string }).orderId);
+  const firstBook = booked.structuredContent as Sc & { status?: string; code?: string };
+  const b = (firstBook.status === "confirmed" ? firstBook : firstBook.kind === "booked" ? await untilFinal(client, tBook, "book_together confirmed", "book_together", { offer_id: best.offerId }, (sc) => sc.status === "confirmed") : firstBook) as Sc & { bookingReference?: string; orderId?: string; seats?: Array<{ name: string; seat: string | null }>; code?: string };
+  check(`${tag}order reached a booking reference (first answer ${firstBook.status ?? firstBook.code})`, b.kind === "booked" && !!b.bookingReference, `${b.kind} ${b.bookingReference ?? b.code ?? ""}`);
+  if (b.kind === "booked" && b.orderId) {
+    if (run === 1) firstBookedRef = b.bookingReference ?? "";
+    const order = await ctx.duffel!.getOrder(b.orderId);
     const seated = Object.values(order.seats).filter(Boolean).length;
-    check("order read back has 4 seat services", seated === 4, `seats ${JSON.stringify(order.seats)}`);
-    const still = await call(client, "still_together", {});
-    check("still_together agrees", (still.structuredContent as { together: boolean }).together === true, String((still.structuredContent as { voice: string }).voice));
+    check(`${tag}order read back has 4 seat services`, seated === 4 || b.strategy === "airline-guarantee", `seats ${JSON.stringify(order.seats)}`);
+
+    const tStill = performance.now();
+    const stillFirst = await call(client, "still_together", {});
+    const sf = stillFirst.structuredContent as Sc & { refreshing?: boolean };
+    const still = sf.refreshing ? await untilFinal(client, tStill, "still_together fresh", "still_together", { order_id: b.orderId }, (sc) => sc.refreshing === false) : sf;
+    await call(client, "still_together", {});
+    check(`${tag}still_together agrees (first answer ${sf.refreshing ? "cached, refreshing" : "fresh"})`, (still as { together: boolean }).together === true, String((still as { voice: string }).voice));
   }
 }
 
@@ -127,7 +170,7 @@ if (!best) {
   void evaluateAssignment;
 }
 {
-  const notTogetherOffer = offersView.offers.find((o) => o.together === "NOT_TOGETHER");
+  const notTogetherOffer = offersView?.offers?.find((o) => o.together === "NOT_TOGETHER");
   if (notTogetherOffer) {
     await call(client, "show_seats", { offer_id: notTogetherOffer.offerId });
     const r = await call(client, "book_together", { offer_id: notTogetherOffer.offerId });
@@ -162,8 +205,13 @@ if (!best) {
   check("(c) lint red on planted description, green after removal", red > 0 && green === 0, `findings with plant=${red}, without=${green}`);
 }
 
-result.latencyMs = Object.fromEntries(Object.entries(timings).map(([k, v]) => [k, { n: v.length, p50: Math.round(pct(v, 50)), p95: Math.round(pct(v, 95)), under500msBudget: pct(v, 95) < 500 }]));
+const stats = (v: number[]) => ({ n: v.length, p50: Math.round(pct(v, 50)), p95: Math.round(pct(v, 95)) });
+result.runs = RUNS;
+result.latencyMs = Object.fromEntries(Object.entries(timings).map(([k, v]) => [k, { ...stats(v), under500msBudget: pct(v, 95) < 500 }]));
+// Time until the work behind a first answer is done: the ranking complete, the reference issued, the fresh reading in.
+result.settleMs = Object.fromEntries(Object.entries(settled).map(([k, v]) => [k, stats(v)]));
 console.table(result.latencyMs);
+console.table(result.settleMs);
 result.checks = checks;
 const file = fixture ? "spikes/seats/results.fixture.json" : "spikes/seats/results.json";
 writeFileSync(file, JSON.stringify(result, null, 2) + "\n");

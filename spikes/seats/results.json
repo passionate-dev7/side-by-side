@@ -1,0 +1,221 @@
+{
+  "mode": "Duffel test mode",
+  "command": "npx tsx spikes/seats/spike.ts",
+  "ranAt": "2026-10-21T12:03:05.415Z",
+  "departure": "2026-11-25",
+  "protocolVersion": {
+    "name": "side-by-side",
+    "version": "0.1.0"
+  },
+  "metric": {
+    "offersRanked": 1,
+    "offersSearched": 2,
+    "togetherForZero": 0,
+    "togetherForZeroPercent": 0,
+    "medianTogetherTotalMinusCheapestFare": 80,
+    "cheapestTogetherTotalMinusCheapestFare": 80
+  },
+  "runs": 5,
+  "latencyMs": {
+    "save_family": {
+      "n": 5,
+      "p50": 3,
+      "p95": 5,
+      "under500msBudget": true
+    },
+    "find_family_flights": {
+      "n": 5,
+      "p50": 204,
+      "p95": 213,
+      "under500msBudget": true
+    },
+    "show_seats": {
+      "n": 5,
+      "p50": 3,
+      "p95": 6,
+      "under500msBudget": true
+    },
+    "move_traveler": {
+      "n": 14,
+      "p50": 2,
+      "p95": 10,
+      "under500msBudget": true
+    },
+    "book_together": {
+      "n": 6,
+      "p50": 209,
+      "p95": 217,
+      "under500msBudget": true
+    },
+    "still_together": {
+      "n": 10,
+      "p50": 204,
+      "p95": 205,
+      "under500msBudget": true
+    }
+  },
+  "settleMs": {
+    "find_family_flights ready": {
+      "n": 5,
+      "p50": 2225,
+      "p95": 3741
+    },
+    "book_together confirmed": {
+      "n": 5,
+      "p50": 2806,
+      "p95": 4253
+    },
+    "still_together fresh": {
+      "n": 5,
+      "p50": 711,
+      "p95": 712
+    }
+  },
+  "checks": [
+    {
+      "name": "run 1: search ranked offers (first answer searching)",
+      "pass": true,
+      "detail": "1 ranked of 2 searched, testMode=true"
+    },
+    {
+      "name": "run 1: hand edit keeps the family together",
+      "pass": true,
+      "detail": "Dad moved to an aisle seat"
+    },
+    {
+      "name": "run 1: order reached a booking reference (first answer booking)",
+      "pass": true,
+      "detail": "booked BVVCQY"
+    },
+    {
+      "name": "run 1: order read back has 4 seat services",
+      "pass": true,
+      "detail": "seats {\"pas_0000BBdUcxAg6zBP73ykwI\":\"32C\",\"pas_0000BBdUcxAg6zBP73ykwK\":\"30J\",\"pas_0000BBdUcxAg6zBP73ykwL\":\"30H\",\"pas_0000BBdUcxAg6zBP73ykwO\":\"30K\"}"
+    },
+    {
+      "name": "run 1: still_together agrees (first answer cached, refreshing)",
+      "pass": true,
+      "detail": "Yes. Dad 32C, Mum 30J, Mia 30H, Leo 30K. Nothing has changed."
+    },
+    {
+      "name": "run 2: search ranked offers (first answer searching)",
+      "pass": true,
+      "detail": "1 ranked of 2 searched, testMode=true"
+    },
+    {
+      "name": "run 2: hand edit keeps the family together",
+      "pass": true,
+      "detail": "Dad moved to an aisle seat"
+    },
+    {
+      "name": "run 2: order reached a booking reference (first answer booking)",
+      "pass": true,
+      "detail": "booked NBY6J4"
+    },
+    {
+      "name": "run 2: order read back has 4 seat services",
+      "pass": true,
+      "detail": "seats {\"pas_0000BBdUdWMsmzU4ntHIzj\":\"28C\",\"pas_0000BBdUdWMsmzU4ntHIzm\":\"30J\",\"pas_0000BBdUdWMsmzU4ntHIzn\":\"30H\",\"pas_0000BBdUdWNElfleozRaXw\":\"30K\"}"
+    },
+    {
+      "name": "run 2: still_together agrees (first answer cached, refreshing)",
+      "pass": true,
+      "detail": "Yes. Dad 28C, Mum 30J, Mia 30H, Leo 30K. Nothing has changed."
+    },
+    {
+      "name": "run 3: search ranked offers (first answer searching)",
+      "pass": true,
+      "detail": "1 ranked of 2 searched, testMode=true"
+    },
+    {
+      "name": "run 3: hand edit keeps the family together",
+      "pass": true,
+      "detail": "Dad moved to an aisle seat"
+    },
+    {
+      "name": "run 3: order reached a booking reference (first answer booking)",
+      "pass": true,
+      "detail": "booked LWO7UO"
+    },
+    {
+      "name": "run 3: order read back has 4 seat services",
+      "pass": true,
+      "detail": "seats {\"pas_0000BBdUeELzp1VbGKaMiY\":\"28C\",\"pas_0000BBdUeELzp1VbGKaMiZ\":\"30J\",\"pas_0000BBdUeELzp1VbGKaMia\":\"30H\",\"pas_0000BBdUeELzp1VbGKaMib\":\"30K\"}"
+    },
+    {
+      "name": "run 3: still_together agrees (first answer cached, refreshing)",
+      "pass": true,
+      "detail": "Yes. Dad 28C, Mum 30J, Mia 30H, Leo 30K. Nothing has changed."
+    },
+    {
+      "name": "run 4: search ranked offers (first answer searching)",
+      "pass": true,
+      "detail": "1 ranked of 2 searched, testMode=true"
+    },
+    {
+      "name": "run 4: hand edit keeps the family together",
+      "pass": true,
+      "detail": "Dad moved to an aisle seat"
+    },
+    {
+      "name": "run 4: order reached a booking reference (first answer booking)",
+      "pass": true,
+      "detail": "booked VS5MHA"
+    },
+    {
+      "name": "run 4: order read back has 4 seat services",
+      "pass": true,
+      "detail": "seats {\"pas_0000BBdUew1zQleKj1Z0ds\":\"28C\",\"pas_0000BBdUew1zQleKj1Z0dt\":\"30J\",\"pas_0000BBdUew1zQleKj1Z0du\":\"30H\",\"pas_0000BBdUew1zQleKj1Z0dv\":\"30K\"}"
+    },
+    {
+      "name": "run 4: still_together agrees (first answer cached, refreshing)",
+      "pass": true,
+      "detail": "Yes. Dad 28C, Mum 30J, Mia 30H, Leo 30K. Nothing has changed."
+    },
+    {
+      "name": "run 5: search ranked offers (first answer searching)",
+      "pass": true,
+      "detail": "1 ranked of 2 searched, testMode=true"
+    },
+    {
+      "name": "run 5: hand edit keeps the family together",
+      "pass": true,
+      "detail": "Dad moved to an aisle seat"
+    },
+    {
+      "name": "run 5: order reached a booking reference (first answer booking)",
+      "pass": true,
+      "detail": "booked GJLJ35"
+    },
+    {
+      "name": "run 5: order read back has 4 seat services",
+      "pass": true,
+      "detail": "seats {\"pas_0000BBdUfNYX5siw5lzscE\":\"28C\",\"pas_0000BBdUfNYX5siw5lzscF\":\"30J\",\"pas_0000BBdUfNYX5siw5lzscG\":\"30H\",\"pas_0000BBdUfNYX5siw5lzscH\":\"30K\"}"
+    },
+    {
+      "name": "run 5: still_together agrees (first answer cached, refreshing)",
+      "pass": true,
+      "detail": "Yes. Dad 28C, Mum 30J, Mia 30H, Leo 30K. Nothing has changed."
+    },
+    {
+      "name": "(a) solver says NOT_TOGETHER when every adjacent pair is taken",
+      "pass": true,
+      "detail": "NOT_TOGETHER"
+    },
+    {
+      "name": "(b) unknown offer returns a structured error",
+      "pass": true,
+      "detail": "offer_unknown"
+    },
+    {
+      "name": "(b) Duffel itself rejects a stale offer",
+      "pass": true,
+      "detail": "validation_required (HTTP 422)"
+    },
+    {
+      "name": "(c) lint red on planted description, green after removal",
+      "pass": true,
+      "detail": "findings with plant=2, without=0"
+    }
+  ]
+}
