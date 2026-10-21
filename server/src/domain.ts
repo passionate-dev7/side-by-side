@@ -95,6 +95,32 @@ export interface OffersView {
   voice: string;
 }
 
+export type FareTag = "cheapest-fare" | "this-flight" | "lowest-total";
+
+/** One flight in the fare versus family-total comparison. */
+export interface FareRow {
+  offerId: string;
+  airline: AirlineInfo;
+  flightNumber: string | null;
+  fare: number;
+  /** Seat fees to sit together: 0 under the DOT guarantee, null when this flight cannot seat the family together. */
+  seatFees: number | null;
+  guarantee: boolean;
+  /** fare + seatFees, or null when the family cannot sit together on this flight. */
+  familyTotal: number | null;
+  tags: FareTag[];
+}
+
+/**
+ * Fare and family total side by side for the flights that matter: the lowest fare of the search, this flight, and the
+ * lowest family total. One flight can carry several tags. `cheapestFareLoses` is true when the lowest fare is not the
+ * lowest family total.
+ */
+export interface FareComparison {
+  rows: FareRow[];
+  cheapestFareLoses: boolean;
+}
+
 export interface SeatMapView {
   kind: "seat-map";
   offerId: string;
@@ -112,6 +138,7 @@ export interface SeatMapView {
   seatFees: number;
   guarantee: boolean;
   togetherTotal: number | null;
+  comparison: FareComparison | null;
   provenance: Provenance;
   voice: string;
 }

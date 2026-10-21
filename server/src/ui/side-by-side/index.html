@@ -134,7 +134,7 @@ button:disabled { cursor: not-allowed; }
 .trav.is-dragging { opacity: 0.35; }
 .ghost { position: fixed; z-index: 20; pointer-events: none; width: 76px; height: var(--seat-h); transform: translate(-50%, -60%) scale(1.06); margin: 0; }
 
-.panel { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; justify-content: center; }
+.panel { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; justify-content: center; }
 .verdict { display: grid; gap: var(--sp-3); justify-items: start; }
 .reason { font-size: var(--fs-body); line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .hint { font-size: var(--fs-label); color: var(--muted); }
@@ -154,6 +154,20 @@ button:disabled { cursor: not-allowed; }
 .pp.sum .n { font-size: var(--fs-title); color: var(--ink); }
 .pp .l { font-size: var(--fs-note); color: var(--muted); }
 .op { font-size: var(--fs-lead); color: var(--muted); padding-bottom: 20px; line-height: 1.1; }
+
+/* fare versus family total */
+.cmp { display: grid; gap: var(--sp-2); }
+.cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) 60px 66px; gap: var(--sp-3); align-items: center; font-size: var(--fs-note); min-width: 0; }
+.cmp-head { font-size: 14px; color: var(--muted); }
+.cmp-head span:not(:first-child) { text-align: right; }
+.cmp-head span:first-child { color: var(--warn); font-weight: 600; white-space: nowrap; }
+.cmp-row .who { display: grid; min-width: 0; line-height: 1.1; }
+.cmp-row .who b { font-size: var(--fs-label); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-row .who i { font-style: normal; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-row .n { text-align: right; }
+.cmp-row .tot { font-weight: 700; }
+.cmp-row.best .tot { color: var(--ok); }
+.cmp-row.mine { border-left: 3px solid var(--accent); padding-left: var(--sp-3); margin-left: calc(-1 * var(--sp-3) - 3px); }
 
 /* provenance */
 .foot-prov, .foot-stack { display: grid; gap: var(--sp-2); }

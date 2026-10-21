@@ -1,4 +1,4 @@
-import type { Cell, SeatMapView, Traveler } from "../../domain.js";
+import type { Cell, FareComparison, SeatMapView, Traveler } from "../../domain.js";
 import { h, reducedMotion } from "./dom.js";
 import { money, seatLetter } from "./format.js";
 import { provenanceStrip, sourceTag } from "./provenance.js";
@@ -127,11 +127,32 @@ export class SeatMapScreen {
         "div",
         { class: "verdict", role: "status" },
         v.together === "TOGETHER" ? chip("ok", "Sitting together", true) : chip("warn", "Not together", true),
-        ...(reasons.length ? reasons.slice(0, 2).map((r) => h("p", { class: "reason" }, r)) : v.together === "TOGETHER" ? [h("p", { class: "reason" }, "Every child has an adult beside them.")] : []),
+        ...reasons.slice(0, 2).map((r) => h("p", { class: "reason" }, r)),
         v.guarantee && v.seatFees === 0 ? chip("accent", "$0 seat fee") : null,
       ),
-      sel ? h("p", { class: "hint live" }, `Tap a seat for ${sel.name}.`) : h("p", { class: "hint" }, "Drag a name to a seat, or tap a name, then a seat."),
+      v.comparison ? this.compare(v.comparison) : null,
+      sel ? h("p", { class: "hint live" }, `Tap a seat for ${sel.name}.`) : (v.comparison?.rows.length ?? 0) >= 3 ? null : h("p", { class: "hint" }, "Drag a name to a seat."),
       h("div", { class: "legend" }, ...(["adult", "child", "taken"] as const).map((k) => h("span", {}, h("b", { class: `k-${k}`, "aria-hidden": "true" }), k === "adult" ? "Adult" : k === "child" ? "Child" : "Taken"))),
+    );
+  }
+
+  /** Fare only next to the family total, for the lowest fare, this flight and the lowest family total. */
+  private compare(c: FareComparison): HTMLElement {
+    const cur = this.view.currency;
+    const words = { "this-flight": "Here", "cheapest-fare": "Lowest fare", "lowest-total": "Best total" } as const;
+    return h(
+      "section",
+      { class: `cmp${c.cheapestFareLoses ? " loses" : ""}`, "aria-label": "Fare compared with family total" },
+      h("div", { class: "cmp-row cmp-head" }, h("span", {}, c.cheapestFareLoses ? "Lowest fare is not lowest total" : ""), h("span", {}, "Fare"), h("span", {}, "Family")),
+      ...c.rows.map((r) =>
+        h(
+          "div",
+          { class: `cmp-row${r.tags.includes("lowest-total") ? " best" : ""}${r.tags.includes("this-flight") ? " mine" : ""}`, "data-offer": r.offerId },
+          h("span", { class: "who" }, h("b", {}, r.airline.name), h("i", {}, [...r.tags].sort().reverse().map((t) => words[t]).join(" · "))),
+          h("span", { class: "n" }, money(r.fare, cur)),
+          h("span", { class: "n tot" }, r.familyTotal === null ? "No seats" : money(r.familyTotal, cur)),
+        ),
+      ),
     );
   }
 

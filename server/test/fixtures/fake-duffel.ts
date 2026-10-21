@@ -64,9 +64,9 @@ export const SCENARIOS: Scenario[] = [
     fare: 760,
     layout: [3, 3],
     rows: 30,
-    // One free pair (14A,14B) and one pair that costs $27 a seat (22D,22E): together costs $54 more.
+    // One free pair (14A,14B) and one pair that costs $45 a seat (22D,22E): together costs $90 more, so the lowest fare ($760) is not the lowest family total.
     taken: onlyFree(["14A", "14B", "22D", "22E", "5C", "9F", "17A", "26D"]),
-    fee: (d) => (d === "22D" || d === "22E" ? 27 : 0),
+    fee: (d) => (d === "22D" || d === "22E" ? 45 : 0),
   },
   {
     id: "off_united",

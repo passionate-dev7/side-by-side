@@ -4,6 +4,8 @@ import type {
   BookedView,
   ErrorView,
   FamilyView,
+  FareComparison,
+  FareRow,
   OfferCard,
   OffersView,
   Provenance,
@@ -33,7 +35,13 @@ export class ToolError extends Error {
   }
 }
 
+/** The offers of one search, shared by reference so any of them can see the others. */
+interface SearchRecord {
+  offerIds: string[];
+}
+
 interface OfferEntry {
+  search?: SearchRecord;
   summary: OfferSummary;
   maps?: { raw: SeatMap[]; grid: Grid; solution: Solution; fetchedAt: number };
 }
@@ -193,6 +201,49 @@ function entryFor(ctx: Ctx, offerId: string): OfferEntry {
   return e;
 }
 
+/** What it costs the family to sit together on one offer, from its solved seat map and the DOT table. */
+function priceOffer(o: OfferSummary, solution: Solution): { together: boolean; guarantee: boolean; seatFees: number; total: number | null } {
+  const together = solution.status === "TOGETHER";
+  const guarantee = together && dotFeeFreeAdjacent(o.airline.iata) === true;
+  const seatFees = together && !guarantee ? solution.fee / 100 : 0;
+  return { together, guarantee, seatFees, total: together ? Math.round((o.totalAmount + seatFees) * 100) / 100 : null };
+}
+
+function fareRow(entry: OfferEntry): Omit<FareRow, "tags"> {
+  const o = entry.summary;
+  const p = entry.maps ? priceOffer(o, entry.maps.solution) : null;
+  return {
+    offerId: o.id,
+    airline: airlineInfo(o.airline),
+    flightNumber: o.flightNumber,
+    fare: o.totalAmount,
+    seatFees: p?.together ? p.seatFees : null,
+    guarantee: p?.guarantee ?? false,
+    familyTotal: p?.total ?? null,
+  };
+}
+
+/** The lowest fare and the lowest family total of this offer's search beside this flight. `now` is this flight as the family has it seated right now. */
+function compareFares(ctx: Ctx, entry: OfferEntry, now: { seatFees: number | null; guarantee: boolean; total: number | null }): FareComparison | null {
+  const siblings = (entry.search?.offerIds ?? []).map((id) => ctx.offers.get(id)).filter((e): e is OfferEntry => !!e);
+  if (siblings.length < 2) return null;
+  const rowOf = (e: OfferEntry) => (e === entry ? { ...fareRow(e), seatFees: now.seatFees, guarantee: now.guarantee, familyTotal: now.total } : fareRow(e));
+  const all = siblings.map(rowOf);
+  const cheapest = all.reduce((a, b) => (b.fare < a.fare ? b : a));
+  const priced = all.filter((r) => r.familyTotal !== null);
+  const lowest = priced.length ? priced.reduce((a, b) => (b.familyTotal! < a.familyTotal! ? b : a)) : null;
+  const tagged: Record<string, FareRow> = {};
+  const add = (r: Omit<FareRow, "tags"> | null, tag: FareRow["tags"][number]) => {
+    if (!r) return;
+    (tagged[r.offerId] ??= { ...r, tags: [] }).tags.push(tag);
+  };
+  add(cheapest, "cheapest-fare");
+  add(rowOf(entry), "this-flight");
+  add(lowest, "lowest-total");
+  const rows = Object.values(tagged).sort((a, b) => a.fare - b.fare);
+  return { rows, cheapestFareLoses: !!lowest && lowest.offerId !== cheapest.offerId && (cheapest.familyTotal === null || lowest.familyTotal! < cheapest.familyTotal) };
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // find_family_flights
 
@@ -212,7 +263,8 @@ export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<Off
   if (res.offers.length === 0) {
     throw new ToolError("no_offers", `No direct flights found from ${input.origin} to ${input.destination} on ${input.departureDate}.`, `I found no direct flights from ${input.origin} to ${input.destination} on that date.`);
   }
-  for (const o of res.offers) ctx.offers.set(o.id, { summary: o });
+  const search: SearchRecord = { offerIds: res.offers.map((o) => o.id) };
+  for (const o of res.offers) ctx.offers.set(o.id, { summary: o, search });
 
   const priced = await Promise.all(
     res.offers.map(async (o) => {
@@ -231,13 +283,8 @@ export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<Off
   const cards: OfferCard[] = priced
     .filter((p): p is { o: OfferSummary; maps: NonNullable<OfferEntry["maps"]> } => p.maps !== null)
     .map(({ o, maps }) => {
-      const dot = dotFeeFreeAdjacent(o.airline.iata);
-      const together = maps.solution.status === "TOGETHER";
-      const guarantee = together && dot === true;
-      const fee = maps.solution.status === "TOGETHER" ? maps.solution.fee / 100 : 0;
-      const seatFees = guarantee ? 0 : fee;
+      const { together, guarantee, seatFees, total } = priceOffer(o, maps.solution);
       const status: TogetherStatus = together ? "TOGETHER" : "NOT_TOGETHER";
-      const total = together ? Math.round((o.totalAmount + seatFees) * 100) / 100 : null;
       return {
         offerId: o.id,
         airline: airlineInfo(o.airline),
@@ -289,6 +336,16 @@ export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<Off
 // ---------------------------------------------------------------------------------------------------------------
 // seat views
 
+/** One spoken sentence when the lowest fare is not the lowest family total. */
+function fareNote(c: FareComparison | null, currency: string): string {
+  if (!c?.cheapestFareLoses) return "";
+  const lo = c.rows.find((r) => r.tags.includes("cheapest-fare"))!;
+  const best = c.rows.find((r) => r.tags.includes("lowest-total"))!;
+  if (lo.offerId === best.offerId) return "";
+  const loTotal = lo.familyTotal === null ? "your family cannot sit together on it" : `${money(lo.familyTotal, currency)} for your family to sit together`;
+  return ` ${lo.airline.name} has the lowest fare at ${money(lo.fare, currency)}, but ${loTotal}. ${best.airline.name} is the lowest family total at ${money(best.familyTotal!, currency)}.`;
+}
+
 function buildSeatView(ctx: Ctx, entry: OfferEntry, family: Family, plan: Plan): SeatMapView {
   const maps = entry.maps!;
   const o = entry.summary;
@@ -304,10 +361,11 @@ function buildSeatView(ctx: Ctx, entry: OfferEntry, family: Family, plan: Plan):
   const occupant = new Map(Object.entries(plan.assignments).map(([m, s]) => [s, m]));
   const together = ev.together;
   const total = together ? Math.round((o.totalAmount + payable) * 100) / 100 : null;
+  const comparison = compareFares(ctx, entry, { seatFees: together ? payable : null, guarantee: guarantee && !plan.customized, total });
 
   const placed = assignments.map((a) => `${nameOf.get(a.memberId)} ${a.seat}`).join(", ");
   const voice = together
-    ? `${placed}. Everyone has a family neighbor. ${guarantee && !plan.customized ? `${o.airline.name} seats your child beside an adult at no fee, so seats cost nothing.` : payable > 0 ? `Seats cost ${money(payable, o.currency)}.` : "The seats are free."} Total ${money(total!, o.currency)}.`
+    ? `${placed}. Everyone has a family neighbor. ${guarantee && !plan.customized ? `${o.airline.name} seats your child beside an adult at no fee, so seats cost nothing.` : payable > 0 ? `Seats cost ${money(payable, o.currency)}.` : "The seats are free."} Total ${money(total!, o.currency)}.${fareNote(comparison, o.currency)}`
     : `Not together yet. ${ev.violations.map((v) => `${nameOf.get(v.memberId)}: ${v.reason}`).join(" ")}`;
 
   return {
@@ -326,6 +384,7 @@ function buildSeatView(ctx: Ctx, entry: OfferEntry, family: Family, plan: Plan):
     seatFees: payable,
     guarantee,
     togetherTotal: total,
+    comparison,
     provenance: provenanceOf(ctx, o.airline.iata, o.liveMode, false),
     voice,
   };
