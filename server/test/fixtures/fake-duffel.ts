@@ -106,6 +106,8 @@ export class FakeDuffel implements DuffelPort {
   readonly noSeatMap = new Set<string>();
   /** Only for testing that labels follow the data's mode. The emulator is never live. */
   live = false;
+  /** Pretend the airline holds more offers than the page returned. */
+  moreBeyond = false;
   /** Polls before an order shows a booking reference. */
   confirmAfterPolls = 1;
 
@@ -166,7 +168,7 @@ export class FakeDuffel implements DuffelPort {
       this.offers.set(sc.id, { summary, map, services });
       offers.push(summary);
     }
-    return { offers: offers.slice(0, req.limit), liveMode: this.live, moreAvailable: offers.length > req.limit };
+    return { offers: offers.slice(0, req.limit), liveMode: this.live, moreAvailable: this.moreBeyond || offers.length > req.limit };
   }
 
   async seatMaps(offerId: string) {

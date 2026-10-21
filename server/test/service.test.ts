@@ -74,6 +74,20 @@ describe("find_family_flights", () => {
     expect(v.voice).toMatch(/JetBlue/);
   });
 
+  it("every card's numbers add up: fare plus the listed seat fees is the family total, and a waiver lists no fees", async () => {
+    const v = await searched();
+    expect(v.offers.length).toBeGreaterThan(2);
+    for (const o of v.offers) {
+      expect(Math.round(o.seatLines.reduce((t, l) => t + l.fee, 0) * 100) / 100).toBe(o.seatFees);
+      if (o.togetherTotal !== null) expect(Math.round((o.fare + o.seatFees) * 100) / 100).toBe(o.togetherTotal);
+      if (o.waiver.applies) expect(o.seatLines).toEqual([]);
+    }
+    const by = Object.fromEntries(v.offers.map((o) => [o.airline.iata, o]));
+    expect(by.B6).toMatchObject({ seatFees: 0, waivedFees: 72 });
+    expect(by.DL.seatLines.filter((l) => l.fee > 0).map((l) => l.fee)).toEqual([45, 45]);
+    expect(by.UA).toMatchObject({ seatLines: [], waivedFees: 0, togetherTotal: null });
+  });
+
   it("labels the offer, seat map, DOT rule and booking, and says how many offers were evaluated", async () => {
     const v = await searched();
     expect(v.provenance).toEqual({
@@ -95,13 +109,19 @@ describe("find_family_flights", () => {
     expect(v.voice).not.toMatch(/United/);
   });
 
-  it("says when more fares exist than were evaluated", async () => {
+  it("says how many fares exist, how many had their seat map read, and whether more exist beyond the page", async () => {
     const many = Array.from({ length: 12 }, (_, i) => ({ ...SCENARIOS[1], id: `off_many_${i}`, fare: 700 + i }));
     fake = new FakeDuffel(many);
     ctx = createCtx({ duffel: fake, store: openStore(":memory:"), now: () => NOW });
     saveFamily(ctx, FAMILY);
     const v = await findFamilyFlights(ctx, SEARCH);
-    expect([v.searched, v.evaluated, v.moreAvailable]).toEqual([10, 10, true]);
+    expect([v.searched, v.evaluated, v.moreAvailable]).toEqual([12, 10, false]);
+    expect(v.voice).toMatch(/I read seat maps for 10 of 12 fares, cheapest first\.$/);
+    expect(v.offers.length).toBeLessThanOrEqual(5);
+    fake.moreBeyond = true;
+    const more = await findFamilyFlights(ctx, SEARCH);
+    expect([more.searched, more.evaluated, more.moreAvailable]).toEqual([12, 10, true]);
+    expect(more.voice).toMatch(/10 of 12\+ fares/);
   });
 
   it("the label follows the data's mode, never a constant", async () => {

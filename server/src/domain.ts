@@ -44,6 +44,8 @@ export interface DotWaiver {
   code: WaiverCode;
   /** One sentence in the dashboard's terms. */
   reason: string;
+  /** The same finding in a few words, for a flight card. */
+  summary: string;
   /** The dashboard's conditions for seat-assigning airlines. met = null when it cannot be known before departure. */
   conditions: Array<{ id: string; text: string; met: boolean | null }>;
 }

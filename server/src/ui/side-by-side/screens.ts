@@ -1,6 +1,7 @@
 import type { BookedView, ErrorView, FamilyView, OfferCard, OffersView, StatusView } from "../../domain.js";
 import { h, type Child } from "./dom.js";
 import { checkedAt, clock, day, money, partyLine, stops } from "./format.js";
+import { breakdown, checkedLabel } from "./audit.js";
 import { sourceLine } from "./provenance.js";
 
 export interface Ctx {
@@ -13,8 +14,9 @@ export function screen(kind: string, ...kids: Child[]): HTMLElement {
   return h("main", { class: "screen is-in", "data-kind": kind }, ...kids);
 }
 
-export function head(title: string, side: Child[] = [], hero = false): HTMLElement {
-  return h("header", { class: "head" }, h("h1", { class: hero ? "title hero" : "title" }, title), h("div", { class: "head-side" }, ...side));
+export function head(title: string, side: Child[] = [], hero = false, subline?: string): HTMLElement {
+  const h1 = h("h1", { class: hero ? "title hero" : "title" }, title);
+  return h("header", { class: "head" }, subline ? h("div", { class: "head-main" }, h1, h("p", { class: "subline" }, subline)) : h1, h("div", { class: "head-side" }, ...side));
 }
 
 export function chip(tone: "ok" | "warn" | "accent", text: string, dot = false): HTMLElement {
@@ -25,21 +27,18 @@ function offerRow(o: OfferCard, v: OffersView, ctx: Ctx): HTMLElement {
   const meta = `${clock(o.departingAt)} to ${clock(o.arrivingAt)} · ${stops(o.stops)}`;
   const priced = o.togetherTotal !== null;
   const delta =
-    !priced ? "Seats not priced"
+    !priced ? "Not together"
     : o.deltaVsCheapestFare === null ? ""
-    : o.deltaVsCheapestFare <= 0 ? "Cheapest together"
-    : `+${money(o.deltaVsCheapestFare, v.currency)} vs cheapest`;
+    : o.deltaVsCheapestFare <= 0 ? "Lowest fare and lowest total"
+    : `+${money(o.deltaVsCheapestFare, v.currency)} over the lowest fare`;
   const btn = h(
     "button",
-    { class: "offer", type: "button", "data-offer": o.offerId },
-    h("div", { class: "offer-main" }, h("div", { class: "airline" }, o.airline.name), h("div", { class: "times" }, meta)),
-    h(
-      "div",
-      { class: "offer-chips" },
-      o.together === "TOGETHER" ? chip("ok", "Together", true) : chip("warn", "Not together", true),
-      o.guarantee ? chip("accent", "$0 seat fee") : null,
-    ),
-    h("div", { class: "offer-price" }, h("div", { class: "total" }, money(priced ? (o.togetherTotal as number) : o.fare, v.currency)), h("div", { class: "delta" }, delta)),
+    { class: `offer${priced ? "" : " is-apart"}`, type: "button", "data-offer": o.offerId },
+    h("div", { class: "o-id" }, h("span", { class: "airline" }, o.airline.name), h("span", { class: "times" }, meta)),
+    h("div", { class: "total" }, money(priced ? (o.togetherTotal as number) : o.fare, v.currency)),
+    h("div", { class: "o-sum" }, breakdown(o, v.currency)),
+    h("div", { class: "delta" }, delta),
+    h("div", { class: `o-why${o.waiver.applies ? " yes" : ""}` }, h("b", {}, o.waiver.applies ? "DOT fee waiver" : "No DOT waiver"), ` ${o.waiver.summary}`),
   );
   btn.addEventListener("click", async () => {
     if (btn.getAttribute("aria-busy") === "true") return;
@@ -50,19 +49,13 @@ function offerRow(o: OfferCard, v: OffersView, ctx: Ctx): HTMLElement {
   return btn;
 }
 
-export function evaluatedLine(v: OffersView): string {
-  const n = (k: number) => `${k} direct fare${k === 1 ? "" : "s"}`;
-  const of = v.evaluated === v.searched ? n(v.evaluated) : `${v.evaluated} of ${n(v.searched)}`;
-  return `Seat maps read and seating solved for ${of}${v.moreAvailable ? ", cheapest first. More fares exist." : "."}`;
-}
-
 export function offersScreen(v: OffersView, ctx: Ctx): HTMLElement {
   const sub = [day(v.route.departureDate), partyLine(v.party)].filter(Boolean).join(" · ");
   return screen(
     "offers",
-    head(`${v.route.origin} to ${v.route.destination}`, [h("span", { class: "sub" }, sub)]),
+    head(`${v.route.origin} to ${v.route.destination}`, [chip("accent", checkedLabel(v))], false, sub),
     h("section", { class: "offers", "aria-label": "Flights ranked by cost to sit together" }, ...v.offers.map((o) => offerRow(o, v, ctx))),
-    h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, evaluatedLine(v)), sourceLine(v.provenance)),
+    h("footer", { class: "foot-prov" }, sourceLine(v.provenance)),
   );
 }
 

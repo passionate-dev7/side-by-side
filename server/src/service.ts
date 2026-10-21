@@ -284,20 +284,24 @@ export interface FindInput {
   cabin: CabinClass;
 }
 
+/** Seat maps are read for this many of the cheapest direct fares. */
 const SEARCH_LIMIT = 10;
+/** Offers fetched per search so the list can say how many fares exist (Duffel returns at most 200 per page). */
+const SEARCH_FETCH = 200;
 
 export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<OffersView> {
   const family = requireFamily(ctx);
   const duffel = duffelOrThrow(ctx);
-  const res = await wrapDuffel(duffel.searchOffers({ ...input, passengers: family.members.map((m) => ({ age: m.age })), limit: SEARCH_LIMIT }));
+  const res = await wrapDuffel(duffel.searchOffers({ ...input, passengers: family.members.map((m) => ({ age: m.age })), limit: SEARCH_FETCH }));
   if (res.offers.length === 0) {
     throw new ToolError("no_offers", `No direct flights found from ${input.origin} to ${input.destination} on ${input.departureDate}.`, `I found no direct flights from ${input.origin} to ${input.destination} on that date.`);
   }
-  const search: SearchRecord = { offerIds: res.offers.map((o) => o.id) };
-  for (const o of res.offers) ctx.offers.set(o.id, { summary: o, search });
+  const checked = res.offers.slice(0, SEARCH_LIMIT);
+  const search: SearchRecord = { offerIds: checked.map((o) => o.id) };
+  for (const o of checked) ctx.offers.set(o.id, { summary: o, search });
 
   const priced = await Promise.all(
-    res.offers.map(async (o) => {
+    checked.map(async (o) => {
       try {
         const maps = await loadMaps(ctx, ctx.offers.get(o.id)!, family);
         return { o, maps };
@@ -350,6 +354,7 @@ export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<Off
       ? `${best.airline.name} is the best way to sit together: ${money(best.togetherTotal!, currency)} total${best.guarantee ? `, and ${best.airline.name} seats a child beside an adult at no fee` : best.seatFees > 0 ? `, including ${money(best.seatFees, currency)} in seat fees` : ""}.` +
         (cheapestCard && cheapestCard.offerId !== best.offerId ? ` The cheapest fare is ${cheapestCard.airline.name} at ${money(cheapestCard.fare, currency)}${cheapestCard.together === "TOGETHER" ? `, ${money(cheapestCard.togetherTotal! - cheapestCard.fare, currency)} more to sit together` : ", but your family cannot sit together on it"}.` : "")
       : "No flight lets the whole family sit together on that day.";
+  const tail = cards.length < res.offers.length || res.moreAvailable ? ` I read seat maps for ${cards.length} of ${res.offers.length}${res.moreAvailable ? "+" : ""} fares, cheapest first.` : "";
 
   return {
     kind: "offers",
@@ -362,7 +367,7 @@ export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<Off
     evaluated: cards.length,
     moreAvailable: res.moreAvailable,
     provenance: provenanceOf(ctx, best.airline.iata, res.liveMode, false),
-    voice,
+    voice: voice + tail,
   };
 }
 

@@ -129,10 +129,10 @@ export class SeatMapScreen {
         { class: "verdict", role: "status" },
         v.together === "TOGETHER" ? chip("ok", "Sitting together", true) : chip("warn", "Not together", true),
         ...reasons.slice(0, 2).map((r) => h("p", { class: "reason" }, r)),
-        v.guarantee && v.seatFees === 0 ? chip("accent", "$0 seat fee") : null,
+        h("p", { class: "why", title: v.waiver.reason }, h("b", { class: v.waiver.applies ? "yes" : "" }, v.waiver.applies ? "DOT fee waiver" : "No DOT waiver"), ` ${v.waiver.summary}`),
       ),
       v.comparison ? this.compare(v.comparison) : null,
-      sel ? h("p", { class: "hint live" }, `Tap a seat for ${sel.name}.`) : (v.comparison?.rows.length ?? 0) >= 3 ? null : h("p", { class: "hint" }, "Drag a name to a seat."),
+      sel ? h("p", { class: "hint live" }, `Tap a seat for ${sel.name}.`) : v.comparison ? null : h("p", { class: "hint" }, "Drag a name to a seat."),
       h("div", { class: "legend" }, ...(["adult", "child", "taken"] as const).map((k) => h("span", {}, h("b", { class: `k-${k}`, "aria-hidden": "true" }), k === "adult" ? "Adult" : k === "child" ? "Child" : "Taken"))),
     );
   }
@@ -213,7 +213,7 @@ export class SeatMapScreen {
         h("span", { class: "op", "aria-hidden": "true" }, "+"),
         part(v.togetherTotal === null ? "-" : money(v.seatFees, v.currency), "Seats"),
         h("span", { class: "op", "aria-hidden": "true" }, "="),
-        part(v.togetherTotal === null ? "Not priced" : money(v.togetherTotal, v.currency), "Together total", true),
+        part(v.togetherTotal === null ? "Not priced" : money(v.togetherTotal, v.currency), "Family total", true),
       ),
       book,
       ),
