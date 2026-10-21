@@ -10,7 +10,7 @@ export type Msg =
   | { role: "tool"; results: ToolResult[] };
 export interface LlmRequest { system: string; messages: Msg[]; tools: ToolDef[] }
 export interface LlmResponse { text: string; toolCalls: ToolCall[] }
-export interface LlmProvider { id: "anthropic" | "openai" | "bedrock"; model: string; complete(req: LlmRequest): Promise<LlmResponse> }
+export interface LlmProvider { id: "anthropic" | "openai" | "bedrock" | "bedrock-mantle"; model: string; complete(req: LlmRequest): Promise<LlmResponse> }
 
 type Env = Record<string, string | undefined>;
 const MAX_TOKENS = 1024;
@@ -56,8 +56,18 @@ function openai(env: Env): LlmProvider {
   const base = env.OPENAI_BASE_URL ?? (openrouter ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1");
   const key = env.OPENAI_API_KEY ?? env.OPENROUTER_API_KEY!;
   const model = env.LLM_MODEL ?? (openrouter ? "anthropic/claude-haiku-4.5" : "gpt-4o-mini");
+  return chatCompletions("openai", base, key, model);
+}
+
+/** Bedrock "mantle": OpenAI-compatible chat completions with tool calling, authenticated by AWS_BEARER_TOKEN_BEDROCK. */
+function bedrockMantle(env: Env): LlmProvider {
+  const region = env.AWS_REGION ?? env.AWS_DEFAULT_REGION ?? "us-east-1";
+  return chatCompletions("bedrock-mantle", `https://bedrock-mantle.${region}.api.aws/v1`, env.AWS_BEARER_TOKEN_BEDROCK!, env.LLM_MODEL ?? "openai.gpt-oss-120b");
+}
+
+function chatCompletions(id: "openai" | "bedrock-mantle", base: string, key: string, model: string): LlmProvider {
   return {
-    id: "openai",
+    id,
     model,
     async complete({ system, messages, tools }) {
       const wire: unknown[] = [{ role: "system", content: system }];
@@ -71,12 +81,12 @@ function openai(env: Env): LlmProvider {
           });
         else for (const r of m.results) wire.push({ role: "tool", tool_call_id: r.id, content: r.text });
       }
-      const out = await postJson("openai-compatible", `${base}/chat/completions`, { authorization: `Bearer ${key}` }, {
+      const out = await postJson(id, `${base}/chat/completions`, { authorization: `Bearer ${key}` }, {
         model, max_tokens: MAX_TOKENS, messages: wire,
         ...(tools.length && { tools: tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description ?? "", parameters: t.inputSchema } })) }),
       });
       const msg = out.choices?.[0]?.message;
-      if (!msg) throw new Error(`openai-compatible: response had no choices: ${JSON.stringify(out).slice(0, 300)}`);
+      if (!msg) throw new Error(`${id}: response had no choices: ${JSON.stringify(out).slice(0, 300)}`);
       return {
         text: (msg.content ?? "").trim(),
         toolCalls: (msg.tool_calls ?? []).map((c: { id: string; function: { name: string; arguments: string } }) => ({
@@ -125,10 +135,11 @@ export function selectProvider(env: Env = process.env): { provider?: LlmProvider
     anthropic: !!env.ANTHROPIC_API_KEY,
     openai: !!(env.OPENAI_API_KEY || env.OPENROUTER_API_KEY),
     bedrock: !!(env.AWS_BEARER_TOKEN_BEDROCK || env.AWS_ACCESS_KEY_ID || env.AWS_PROFILE),
+    "bedrock-mantle": !!env.AWS_BEARER_TOKEN_BEDROCK,
   };
-  const make = { anthropic, openai, bedrock };
-  const id = (forced as keyof typeof make | undefined) ?? (["anthropic", "openai", "bedrock"] as const).find((k) => has[k]);
-  if (!id || !(id in make)) return { presentNames, error: "No LLM credentials found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY (or OPENROUTER_API_KEY, optionally OPENAI_BASE_URL), or AWS_BEARER_TOKEN_BEDROCK / AWS_PROFILE for Bedrock." };
+  const make = { anthropic, openai, bedrock, "bedrock-mantle": bedrockMantle };
+  const id = (forced as keyof typeof make | undefined) ?? (["bedrock-mantle", "anthropic", "openai", "bedrock"] as const).find((k) => has[k]);
+  if (!id || !(id in make)) return { presentNames, error: "No LLM credentials found. Set ANTHROPIC_API_KEY, OPENAI_API_KEY (or OPENROUTER_API_KEY, optionally OPENAI_BASE_URL), AWS_BEARER_TOKEN_BEDROCK for Bedrock mantle (the default when set), or AWS_PROFILE for Bedrock Converse." };
   if (!has[id]) return { presentNames, error: `LLM_PROVIDER=${id} but its credential env var is not set.` };
   return { provider: make[id](env), presentNames };
 }
