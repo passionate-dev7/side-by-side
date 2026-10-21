@@ -56,6 +56,23 @@ describe("book_together answers with the booking state and finishes the order in
     expect(ctx.store.latestOrder("default")).toMatchObject({ bookingReference: "FXT4KQ" });
   });
 
+  it("saving the family again starts a fresh trip: finished bookings and searches are forgotten, a booking in flight is not", async () => {
+    await bookTogether(ctx, { offerId: "off_delta", confirmed: true }, null);
+    expect(ctx.bookings.size).toBe(1);
+    expect(ctx.searches.size).toBe(1);
+    saveFamily(ctx, FAMILY);
+    expect(ctx.bookings.size).toBe(0);
+    expect(ctx.searches.size).toBe(0);
+    fake.delay.order = 80;
+    await findFamilyFlights(ctx, SEARCH);
+    await showSeats(ctx, "off_jetblue");
+    await bookTogether(ctx, { offerId: "off_jetblue", confirmed: true }, null);
+    expect(job("off_jetblue").status).toBe("booking");
+    saveFamily(ctx, FAMILY);
+    expect(ctx.bookings.size).toBe(1);
+    await job("off_jetblue").done;
+  });
+
   it("a fast airline answers with the confirmed booking in the same call", async () => {
     const v = await bookTogether(ctx, { offerId: "off_delta", confirmed: true }, null);
     expect(v).toMatchObject({ status: "confirmed", bookingReference: "FXT4KQ" });

@@ -210,6 +210,9 @@ export function saveFamily(ctx: Ctx, input: SaveFamilyInput): FamilyView {
   }
   const family: Family = { members, ...(input.familyName ? { familyName: input.familyName } : {}), ...(input.email ? { email: input.email } : {}), ...(input.phoneNumber ? { phoneNumber: input.phoneNumber } : {}) };
   ctx.store.saveFamily(ctx.account, family);
+  // A new party is a new trip: earlier searches and finished bookings no longer describe it. A booking in flight keeps going.
+  ctx.searches.clear();
+  for (const [offerId, job] of ctx.bookings) if (job.status !== "booking") ctx.bookings.delete(offerId);
   const party = members.map(toTraveler);
   const kids = party.filter((t) => t.role === "child");
   const missingForBooking = [

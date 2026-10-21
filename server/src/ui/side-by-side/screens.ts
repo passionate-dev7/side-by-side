@@ -50,8 +50,10 @@ export function offersScreen(v: OffersView, ctx: Ctx): HTMLElement {
   const sub = [day(v.route.departureDate).replace(/^\w+, /, ""), partyLine(v.party)].filter(Boolean).join(" · ");
   return screen(
     "offers",
-    head(`${v.route.origin} to ${v.route.destination}`, [chip("muted", checkedLabel(v))], false, sub),
-    h("section", { class: "offers", "aria-label": "Flights ranked by cost to sit together" }, ...v.offers.map((o) => offerRow(o, v, ctx))),
+    head(`${v.route.origin} to ${v.route.destination}`, [v.status === "searching" ? chip("accent", `Reading seats ${v.checking.done} of ${v.checking.of || "..."}`) : chip("muted", checkedLabel(v))], false, sub),
+    v.offers.length
+      ? h("section", { class: "offers", "aria-label": "Flights ranked by cost to sit together" }, ...v.offers.map((o) => offerRow(o, v, ctx)))
+      : h("section", { class: "wait", role: "status" }, pulse(), h("p", { class: "big" }, v.searched ? `Reading seat maps on the ${v.checking.of} cheapest of ${v.searched} fares` : "Searching fares"), h("p", { class: "label" }, "Each flight appears here as its seats are priced.")),
     h("footer", { class: "foot-prov" }, sourceLine(v.provenance)),
   );
 }
@@ -62,6 +64,7 @@ function seatItem(name: string, seat: string | null, trailing?: Child): HTMLElem
 
 export function bookedScreen(v: BookedView): HTMLElement {
   const flight = `${v.route.origin} to ${v.route.destination} · ${day(v.route.departingAt).replace(/^\w+, /, "")}, ${clock(v.route.departingAt)}`;
+  const placing = v.status === "booking";
   const waived = v.strategy === "airline-guarantee";
   const right = waived
     ? h(
@@ -74,8 +77,8 @@ export function bookedScreen(v: BookedView): HTMLElement {
     : h("ul", { class: "who", "aria-label": "Seats by traveler" }, ...v.seats.map((s) => seatItem(s.name, s.seat)));
   return screen(
     "booked",
-    head(`Booked on ${v.airline.name}`),
-    h("section", { class: "split" }, h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, flight), h("div", { class: "big" }, `Total ${money(v.total, v.currency)}`)), right),
+    head(placing ? `Booking on ${v.airline.name}` : `Booked on ${v.airline.name}`, placing ? [chip("accent", `Confirming with ${v.airline.name}`)] : []),
+    h("section", { class: "split" }, h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), placing ? h("div", { class: "ref-wait", role: "status" }, pulse(), h("span", {}, "On its way")) : h("div", { class: "ref" }, v.bookingReference ?? ""), h("div", { class: "flight" }, flight), h("div", { class: "big" }, `Total ${money(v.total, v.currency)}`)), right),
     h("footer", { class: "foot-prov" }, sourceLine(v.provenance)),
   );
 }
@@ -89,7 +92,7 @@ function statusTitle(v: StatusView): string {
 function reseatLine(v: StatusView): string {
   const r = v.reseat;
   const who = v.airline.name;
-  if (!r) return `Checked ${checkedAt(v.checkedAt)}`;
+  if (!r) return `Checked ${checkedAt(v.checkedAt)}${v.refreshing ? ". Checking again." : ""}`;
   if (r.status === "unavailable") return `${r.reason} Ask ${who} to seat ${v.affected.map((a) => a.name).join(" and ")} beside an adult.`;
   const moves = r.moves.map((m) => `${m.name} to ${m.to}`).join(", ");
   return r.guaranteeApplies ? `Proposed: ${moves}. ${who} commits to this at no fee. Ask them to make the change.` : `Proposed: ${moves}${r.fee > 0 ? `, ${money(r.fee, r.currency)} in seat fees` : ", no seat fee"}. Ask ${who} to make the change.`;
@@ -146,11 +149,13 @@ export function errorScreen(v: Pick<ErrorView, "code" | "message">): HTMLElement
   return screen("error", head("That did not go through"), h("section", { class: "wait" }, h("p", { class: "big" }, v.message), h("p", { class: "code" }, v.code)), h("span"));
 }
 
+const pulse = () => h("div", { class: "pulse", "aria-hidden": "true" }, h("span"), h("span"), h("span"));
+
 export function waitingScreen(message: string | null, detail: string | null): HTMLElement {
   return screen(
     "waiting",
     head("Getting your trip ready"),
-    h("section", { class: "wait", role: "status" }, h("div", { class: "pulse", "aria-hidden": "true" }, h("span"), h("span"), h("span")), h("p", { class: "big" }, message ?? "Waiting for the trip details."), detail ? h("p", { class: "label" }, detail) : null),
+    h("section", { class: "wait", role: "status" }, pulse(), h("p", { class: "big" }, message ?? "Waiting for the trip details."), detail ? h("p", { class: "label" }, detail) : null),
     h("span"),
   );
 }

@@ -24,6 +24,10 @@ Side by Side is an MCP server for Alexa+. It ranks flights by what it costs for 
 5. Booking: `book_together`. The server may ask for missing passenger details and a final yes. It refuses when a child would sit apart from an adult.
 6. Later: `still_together` reads the booked seats and any airline changes and says yes or no with the row change. When the airline moved a child away from every adult, it names the child, the old and new seat, and proposes seats that put the child beside an adult again; relay it and say who to ask.
 
+## Work that takes a moment
+
+Seat maps and orders come from the airline, which takes seconds, and a tool answers in well under a second. `find_family_flights` answers with the best ranked offers that are ready and says it is still reading seat maps; the screen fills in as they land. `book_together` answers that the booking is being placed and the reference follows; asking again returns the same booking, never a second one. `still_together` answers with the last reading, says how old it is, and refreshes. When a result says it is still working, say that in one sentence and stop. Ask again only when the traveler asks.
+
 ## Voice
 
 Speak in short plain sentences with no markdown, lists, symbols or emoji. Lead with the answer: "JetBlue seats your family together for 812 dollars, 52 more than the cheapest fare." Name the people and the seats. Do not read tables aloud. Every tool returns a spoken line; use it. On screens the tool also draws a 768 by 480 card, so keep speech to the headline.
