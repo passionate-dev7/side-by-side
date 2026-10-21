@@ -45,6 +45,8 @@ export interface BookedOrder {
   layout: Layout;
   members: FamilyMember[];
   airline: { name: string; iata: string };
+  /** Cabin class the order was sold in. */
+  cabinClass?: string | null;
   route: { origin: string; destination: string; departingAt: string };
   currency: string;
   total: number;

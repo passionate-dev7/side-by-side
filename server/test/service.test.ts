@@ -258,6 +258,79 @@ describe("no adjacent seats on the flight", () => {
   });
 });
 
+describe("a DOT-listed carrier does not get $0 seats unless the dashboard's conditions hold", () => {
+  const JB = SCENARIOS[0];
+  const fares = async () => (await findFamilyFlights(ctx, SEARCH)).offers[0];
+
+  it("ranking states the waiver per carrier: JetBlue applies, Delta has no commitment, an unlisted carrier is not assumed", async () => {
+    const v = await searched();
+    const by = Object.fromEntries(v.offers.map((o) => [o.airline.iata, o.waiver.code]));
+    expect(by).toEqual({ B6: "applies", DL: "carrier_no_commitment", ZZ: "carrier_not_listed", UA: "carrier_no_commitment" });
+  });
+
+  it("no traveler 13 or under: JetBlue's seats are not waived and are paid for, even though the carrier is listed", async () => {
+    onlyFlights([JB]);
+    saveFamily(ctx, { travelers: [{ name: "Dad", age: 40, gender: "m", bornOn: "1986-03-02" }, { name: "Zoe", age: 14, gender: "f", bornOn: "2012-05-11" }], familyName: "Rivera", email: "family@example.com", phoneNumber: "+12125550123" });
+    const card = await fares();
+    expect(card).toMatchObject({ guarantee: false, seatFees: 36, togetherTotal: 848, waivedFees: 0 });
+    expect(card.waiver).toMatchObject({ applies: false, code: "no_young_child" });
+    expect(card.seatLines).toEqual([{ traveler: "Dad", seat: expect.any(String), fee: 18 }, { traveler: "Zoe", seat: expect.any(String), fee: 18 }]);
+    await showSeats(ctx, "off_jetblue");
+    const booked = await bookTogether(ctx, { offerId: "off_jetblue", confirmed: true }, null);
+    expect(booked).toMatchObject({ strategy: "seat-services", total: 848 });
+    // control: a child of 13 on the same flight is covered and costs the fare only
+    onlyFlights([JB]);
+    saveFamily(ctx, { travelers: [{ name: "Dad", age: 40 }, { name: "Zoe", age: 13 }] });
+    expect(await fares()).toMatchObject({ guarantee: true, seatFees: 0, togetherTotal: 812, waivedFees: 36 });
+  });
+
+  it("seats chosen by hand end the waiver: moving a parent on JetBlue makes the seats paid and the view says why", async () => {
+    onlyFlights([JB]);
+    await findFamilyFlights(ctx, SEARCH);
+    const before = await showSeats(ctx, "off_jetblue");
+    expect(before.waiver.code).toBe("applies");
+    expect(before.seatLines).toEqual([]);
+    const moved = await moveTraveler(ctx, { offerId: "off_jetblue", traveler: "Dad", position: "aisle" });
+    expect(moved.waiver).toMatchObject({ applies: false, code: "seats_chosen" });
+    expect(moved.guarantee).toBe(false);
+    expect(moved.seatFees).toBe(72);
+    expect(moved.seatLines.map((l) => l.fee)).toEqual([18, 18, 18, 18]);
+    expect(moved.togetherTotal).toBe(884);
+    const booked = await bookTogether(ctx, { offerId: "off_jetblue", confirmed: true }, null);
+    expect(booked).toMatchObject({ strategy: "seat-services", total: 884 });
+    expect(fake.orders.get(booked.orderId)!.total).toBe(884);
+  });
+
+  const splitEconomy = { ...JB, taken: (d: string) => !["A", "D"].includes(col(d)) || rowNo(d) % 2 === 0, premium: { rows: 6, layout: [3, 3], cabinClass: "premium_economy" as const } };
+
+  it("adjacent seats exist only in another cabin: an economy fare gets no $0 seats and no priced seating", async () => {
+    onlyFlights([splitEconomy]);
+    const card = await fares();
+    expect(card).toMatchObject({ together: "NOT_TOGETHER", guarantee: false, togetherTotal: null, seatFees: 0 });
+    expect(card.waiver).toMatchObject({ applies: false, code: "no_seating" });
+    expect(card.waiver.conditions.find((c) => c.id === "adjacent_in_class")!.met).toBe(false);
+    await expect(bookTogether(ctx, { offerId: "off_jetblue", confirmed: true }, null)).rejects.toMatchObject({ code: "no_adjacent_seats" });
+    expect(fake.orders.size).toBe(0);
+  });
+
+  it("control: the same plane sold in premium economy seats the family there and the waiver applies", async () => {
+    onlyFlights([splitEconomy]);
+    const card = (await findFamilyFlights(ctx, { ...SEARCH, cabin: "premium_economy" })).offers[0];
+    expect(card).toMatchObject({ together: "TOGETHER", guarantee: true, seatFees: 0, togetherTotal: 812 });
+    const seats = await showSeats(ctx, "off_jetblue");
+    expect(seats.assignments.every((a) => rowNo(a.seat) > 30)).toBe(true);
+  });
+
+  it("a Basic fare is not excluded: the dashboard row covers all fare types", async () => {
+    onlyFlights([{ ...JB, fareBrand: "Basic" }]);
+    expect(fake.offers.size).toBe(0);
+    const card = await fares();
+    expect(fake.offers.get("off_jetblue")!.summary.fareBrand).toBe("Basic");
+    expect(card.waiver).toMatchObject({ applies: true, code: "applies" });
+    expect(card.waiver.reason).toMatch(/all fare types/);
+  });
+});
+
 describe("a carrier that is not on the DOT dashboard is not fee-free", () => {
   const QQ: Scenario = { id: "off_nowhere", airline: { name: "Nowhere Air", iata: "QQ" }, fare: 500, layout: [3, 3], rows: 30, taken: () => false, fee: () => 18 };
 

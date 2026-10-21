@@ -7,16 +7,81 @@
     "method": "Table read from the live page in a browser: row \"Guarantees adjacent seats for a child 13 or under and an accompanying adult at no additional cost for all fare types\", columns Alaska, Allegiant, American, Delta, Frontier, Hawaiian, JetBlue, Southwest, United."
   },
   "childMaxAge": 13,
-  "conditions": "Subject to the dashboard's limited conditions: child and accompanying adult on the same reservation, adjacent seats available at booking, and seats chosen for everyone or for no one.",
+  "fareTypes": "all",
+  "fareTypesSource": "Dashboard row: \"Guarantees adjacent seats for a child 13 or under and an accompanying adult at no additional cost for all fare types\". The dashboard names no fare type that is excluded.",
+  "conditions": [
+    {
+      "id": "same_reservation",
+      "appliesTo": "seat-assigning airlines",
+      "text": "Child and accompanying adult are on the same reservation"
+    },
+    {
+      "id": "adjacent_in_class",
+      "appliesTo": "seat-assigning airlines",
+      "text": "Adjacent seats are available at the time of booking in the selected class of service"
+    },
+    {
+      "id": "no_downgauge",
+      "appliesTo": "seat-assigning airlines",
+      "text": "Aircraft is not substituted for smaller aircraft"
+    },
+    {
+      "id": "seats_untouched",
+      "appliesTo": "seat-assigning airlines",
+      "text": "Adult either chooses seats for the entire reservation or skips seats for the entire reservation, and does not make changes to seat assignments once assigned to them"
+    },
+    {
+      "id": "layout_possible",
+      "appliesTo": "seat-assigning airlines",
+      "text": "It is physically possible based on seat layout to seat the number of young children traveling next to the accompanying adult(s)"
+    }
+  ],
+  "assignedBy": "If the conditions are satisfied, airlines that assign seats and guarantee fee-free family seating provide adjacent seat assignments to the adult traveling with a child age 13 or under no later than the day before the flight.",
   "carriers": [
-    { "iata": "AS", "name": "Alaska", "feeFreeAdjacent": true },
-    { "iata": "G4", "name": "Allegiant", "feeFreeAdjacent": false },
-    { "iata": "AA", "name": "American", "feeFreeAdjacent": true },
-    { "iata": "DL", "name": "Delta", "feeFreeAdjacent": false },
-    { "iata": "F9", "name": "Frontier", "feeFreeAdjacent": true },
-    { "iata": "HA", "name": "Hawaiian", "feeFreeAdjacent": true },
-    { "iata": "B6", "name": "JetBlue", "feeFreeAdjacent": true },
-    { "iata": "WN", "name": "Southwest", "feeFreeAdjacent": false },
-    { "iata": "UA", "name": "United", "feeFreeAdjacent": false }
+    {
+      "iata": "AS",
+      "name": "Alaska",
+      "feeFreeAdjacent": true
+    },
+    {
+      "iata": "G4",
+      "name": "Allegiant",
+      "feeFreeAdjacent": false
+    },
+    {
+      "iata": "AA",
+      "name": "American",
+      "feeFreeAdjacent": true
+    },
+    {
+      "iata": "DL",
+      "name": "Delta",
+      "feeFreeAdjacent": false
+    },
+    {
+      "iata": "F9",
+      "name": "Frontier",
+      "feeFreeAdjacent": true
+    },
+    {
+      "iata": "HA",
+      "name": "Hawaiian",
+      "feeFreeAdjacent": true
+    },
+    {
+      "iata": "B6",
+      "name": "JetBlue",
+      "feeFreeAdjacent": true
+    },
+    {
+      "iata": "WN",
+      "name": "Southwest",
+      "feeFreeAdjacent": false
+    },
+    {
+      "iata": "UA",
+      "name": "United",
+      "feeFreeAdjacent": false
+    }
   ]
 }

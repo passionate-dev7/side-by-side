@@ -9,6 +9,8 @@ import type {
   FareRow,
   NoAdjacentSeats,
   AffectedTraveler,
+  DotWaiver,
+  SeatLine,
   OfferCard,
   OffersView,
   Reseat,
@@ -21,6 +23,7 @@ import type {
 } from "./domain.js";
 import { DuffelApiError, type CabinClass, type DuffelPort, type OfferSummary } from "./duffel.js";
 import { DOT_CHILD_MAX_AGE, DOT_SOURCE, dotFeeFreeAdjacent } from "./dot.js";
+import { evaluateWaiver } from "./waiver.js";
 import { buildGrid, gridFromLayout, layoutOf, viewRows, type Grid } from "./seatmap.js";
 import { evaluateAssignment, isAdjacencyFinding, solveSeating, type PartyMember, type Solution } from "./solver.js";
 import type { BookedOrder, Family, FamilyMember, Plan, Store } from "./store.js";
@@ -48,7 +51,7 @@ interface SearchRecord {
 interface OfferEntry {
   search?: SearchRecord;
   summary: OfferSummary;
-  maps?: { raw: SeatMap[]; grid: Grid; solution: Solution; fetchedAt: number };
+  maps?: { raw: SeatMap[]; grid: Grid; solution: Solution; price: Price; fetchedAt: number };
 }
 
 export interface Ctx {
@@ -194,9 +197,9 @@ async function loadMaps(ctx: Ctx, entry: OfferEntry, family: Family, force = fal
   const raw = await wrapDuffel(duffelOrThrow(ctx).seatMaps(entry.summary.id));
   const map = raw.find((m) => m.segment_id === entry.summary.segmentId) ?? raw[0];
   if (!map) return null;
-  const grid = buildGrid(map);
+  const grid = buildGrid(map, { cabinClass: entry.summary.cabinClass });
   const solution = solveSeating(grid, partyFor(family, entry.summary.passengerIds));
-  entry.maps = { raw, grid, solution, fetchedAt: ctx.now().getTime() };
+  entry.maps = { raw, grid, solution, price: priceOffer(entry.summary, solution, family), fetchedAt: ctx.now().getTime() };
   return entry.maps;
 }
 
@@ -207,16 +210,38 @@ function entryFor(ctx: Ctx, offerId: string): OfferEntry {
 }
 
 /** What it costs the family to sit together on one offer, from its solved seat map and the DOT table. */
-function priceOffer(o: OfferSummary, solution: Solution): { together: boolean; guarantee: boolean; seatFees: number; total: number | null } {
+interface Price {
+  together: boolean;
+  waiver: DotWaiver;
+  guarantee: boolean;
+  seatFees: number;
+  waivedFees: number;
+  seatLines: SeatLine[];
+  total: number | null;
+}
+
+const waiverFor = (o: OfferSummary, family: Family, seatingExists: boolean, seatsChosenByHand: boolean): DotWaiver =>
+  evaluateWaiver({ iata: o.airline.iata, airlineName: o.airline.name, ages: family.members.map((m) => m.age), seatingExists, seatsChosenByHand, cabinClass: o.cabinClass });
+
+function priceOffer(o: OfferSummary, solution: Solution, family: Family): Price {
   const together = solution.status === "TOGETHER";
-  const guarantee = together && dotFeeFreeAdjacent(o.airline.iata) === true;
-  const seatFees = together && !guarantee ? solution.fee / 100 : 0;
-  return { together, guarantee, seatFees, total: together ? Math.round((o.totalAmount + seatFees) * 100) / 100 : null };
+  const waiver = waiverFor(o, family, together, false);
+  const fee = together ? solution.fee / 100 : 0;
+  const nameOf = new Map(family.members.map((m) => [m.id, m.name]));
+  return {
+    together,
+    waiver,
+    guarantee: waiver.applies,
+    seatFees: waiver.applies ? 0 : fee,
+    waivedFees: waiver.applies ? fee : 0,
+    seatLines: together && !waiver.applies ? solution.assignments.map((a) => ({ traveler: nameOf.get(a.memberId)!, seat: a.seat, fee: a.fee / 100 })) : [],
+    total: together ? Math.round((o.totalAmount + (waiver.applies ? 0 : fee)) * 100) / 100 : null,
+  };
 }
 
 function fareRow(entry: OfferEntry): Omit<FareRow, "tags"> {
   const o = entry.summary;
-  const p = entry.maps ? priceOffer(o, entry.maps.solution) : null;
+  const p = entry.maps?.price ?? null;
   return {
     offerId: o.id,
     airline: airlineInfo(o.airline),
@@ -288,7 +313,7 @@ export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<Off
   const cards: OfferCard[] = priced
     .filter((p): p is { o: OfferSummary; maps: NonNullable<OfferEntry["maps"]> } => p.maps !== null)
     .map(({ o, maps }) => {
-      const { together, guarantee, seatFees, total } = priceOffer(o, maps.solution);
+      const { together, guarantee, seatFees, total, waiver, seatLines, waivedFees } = maps.price;
       const status: TogetherStatus = together ? "TOGETHER" : "NOT_TOGETHER";
       return {
         offerId: o.id,
@@ -300,6 +325,9 @@ export async function findFamilyFlights(ctx: Ctx, input: FindInput): Promise<Off
         fare: o.totalAmount,
         seatFees,
         guarantee,
+        waiver,
+        seatLines,
+        waivedFees,
         togetherTotal: total,
         together: status,
         deltaVsCheapestFare: total === null ? null : Math.round((total - cheapestFare) * 100) / 100,
@@ -391,22 +419,22 @@ function buildSeatView(ctx: Ctx, entry: OfferEntry, family: Family, plan: Plan):
   const party = partyFor(family, o.passengerIds);
   const assignments = Object.entries(plan.assignments).map(([memberId, seat]) => ({ memberId, seat }));
   const ev = evaluateAssignment(maps.grid, party, assignments);
-  const dot = dotFeeFreeAdjacent(o.airline.iata);
   const feasible = maps.solution.status === "TOGETHER";
-  const guarantee = feasible && dot === true;
-  const payable = guarantee && !plan.customized ? 0 : ev.fee / 100;
+  const waiver = waiverFor(o, family, feasible, plan.customized);
+  const guarantee = waiver.applies;
+  const payable = guarantee ? 0 : ev.fee / 100;
   const travelers = family.members.map(toTraveler);
   const nameOf = new Map(family.members.map((m) => [m.id, m.name]));
   const occupant = new Map(Object.entries(plan.assignments).map(([m, s]) => [s, m]));
   const together = ev.together;
   const total = together ? Math.round((o.totalAmount + payable) * 100) / 100 : null;
-  const comparison = compareFares(ctx, entry, { seatFees: together ? payable : null, guarantee: guarantee && !plan.customized, total });
+  const comparison = compareFares(ctx, entry, { seatFees: together ? payable : null, guarantee, total });
 
   const noAdjacent = noAdjacentFor(ctx, entry);
 
   const placed = assignments.map((a) => `${nameOf.get(a.memberId)} ${a.seat}`).join(", ");
   const voice = together
-    ? `${placed}. Everyone has a family neighbor. ${guarantee && !plan.customized ? `${o.airline.name} seats your child beside an adult at no fee, so seats cost nothing.` : payable > 0 ? `Seats cost ${money(payable, o.currency)}.` : "The seats are free."} Total ${money(total!, o.currency)}.${fareNote(comparison, o.currency)}`
+    ? `${placed}. Everyone has a family neighbor. ${guarantee ? `${o.airline.name} seats your child beside an adult at no fee, so seats cost nothing.` : payable > 0 ? `Seats cost ${money(payable, o.currency)}.` : "The seats are free."} Total ${money(total!, o.currency)}.${fareNote(comparison, o.currency)}`
     : noAdjacent
       ? noAdjacentSpeech(o, family, noAdjacent)
       : `Not together yet. ${ev.violations.map((v) => `${nameOf.get(v.memberId)}: ${v.reason}`).join(" ")}`;
@@ -426,6 +454,9 @@ function buildSeatView(ctx: Ctx, entry: OfferEntry, family: Family, plan: Plan):
     fare: o.totalAmount,
     seatFees: payable,
     guarantee,
+    waiver,
+    seatLines: guarantee ? [] : assignments.map((a) => ({ traveler: nameOf.get(a.memberId)!, seat: a.seat, fee: (maps.grid.seats.get(a.seat)?.fees.get(o.passengerIds[family.members.findIndex((m) => m.id === a.memberId)]) ?? 0) / 100 })),
+    waivedFees: guarantee ? ev.fee / 100 : 0,
     togetherTotal: total,
     comparison,
     noAdjacent,
@@ -551,8 +582,8 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
     throw new ToolError("not_together", `Not booked. The family would not sit together. ${why}`, `I did not book. ${why}`);
   }
 
-  const dot = dotFeeFreeAdjacent(o.airline.iata);
-  const strategy: BookedView["strategy"] = dot === true && !plan.customized ? "airline-guarantee" : "seat-services";
+  const waiver = waiverFor(o, family, maps.solution.status === "TOGETHER", plan.customized);
+  const strategy: BookedView["strategy"] = waiver.applies ? "airline-guarantee" : "seat-services";
   const seatFee = strategy === "seat-services" ? ev.fee / 100 : 0;
   const total = Math.round((o.totalAmount + seatFee) * 100) / 100;
 
@@ -661,6 +692,7 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
     layout: layoutOf(maps.grid),
     members: family.members,
     airline: o.airline,
+    cabinClass: o.cabinClass,
     route: { origin: o.origin, destination: o.destination, departingAt: o.departingAt },
     currency: detail.currency,
     total: detail.totalAmount,
@@ -701,7 +733,7 @@ async function proposeReseat(ctx: Ctx, stored: BookedOrder, current: Record<stri
   }
   const map = raw[0];
   if (!map) return { status: "unavailable", reason: `${stored.airline.name} no longer shows a seat map for this booking.` };
-  const grid = buildGrid(map);
+  const grid = buildGrid(map, { cabinClass: stored.cabinClass });
   const party: PartyMember[] = stored.members.map((m) => ({ id: m.id, passengerId: stored.passengerIds[m.id], age: m.age }));
   for (const m of stored.members) {
     const held = current[m.id];

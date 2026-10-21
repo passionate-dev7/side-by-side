@@ -9,6 +9,9 @@ import { z } from "zod";
  * return null, never true.
  */
 
+const CONDITION_IDS = ["same_reservation", "adjacent_in_class", "no_downgauge", "seats_untouched", "layout_possible"] as const;
+export type DotConditionId = (typeof CONDITION_IDS)[number];
+
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => !Number.isNaN(Date.parse(s)), "not a calendar date");
 
 const DotFile = z
@@ -21,7 +24,13 @@ const DotFile = z
       method: z.string().min(1),
     }),
     childMaxAge: z.number().int().min(1).max(17),
-    conditions: z.string().min(1),
+    /** "all": the dashboard row says the commitment holds for all fare types and names no exclusion. */
+    fareTypes: z.literal("all"),
+    fareTypesSource: z.string().min(1),
+    conditions: z
+      .array(z.object({ id: z.enum(CONDITION_IDS), appliesTo: z.string().min(1), text: z.string().min(1) }).strict())
+      .min(CONDITION_IDS.length),
+    assignedBy: z.string().min(1),
     carriers: z
       .array(z.object({ iata: z.string().regex(/^[A-Z0-9]{2}$/, "two character IATA code, upper case"), name: z.string().min(1), feeFreeAdjacent: z.boolean() }).strict())
       .min(1),
@@ -33,6 +42,9 @@ const DotFile = z
       if (seen.has(c.iata)) ctx.addIssue({ code: "custom", message: `carrier ${c.iata} is listed twice` });
       seen.add(c.iata);
     }
+    const ids = new Set(f.conditions.map((c) => c.id));
+    for (const id of CONDITION_IDS) if (!ids.has(id)) ctx.addIssue({ code: "custom", message: `condition ${id} is missing` });
+    if (ids.size !== f.conditions.length) ctx.addIssue({ code: "custom", message: "a condition is listed twice" });
     if (f.source.readOn < f.source.dashboardUpdated) ctx.addIssue({ code: "custom", message: "readOn is earlier than the dashboard's own update date" });
   });
 
@@ -61,6 +73,11 @@ const table = parseDotTable(readFileSync(DOT_FILE, "utf8"));
 
 export const DOT_SOURCE = { url: table.source.url, readOn: table.source.readOn, dashboardUpdated: table.source.dashboardUpdated } as const;
 export const DOT_CHILD_MAX_AGE = table.childMaxAge;
+export const DOT_CONDITIONS: ReadonlyArray<{ id: DotConditionId; text: string }> = table.conditions.map(({ id, text }) => ({ id, text }));
+export const DOT_FARE_TYPES = table.fareTypes;
+export const DOT_ASSIGNED_BY = table.assignedBy;
 export const DOT_CARRIERS: ReadonlyArray<{ iata: string; name: string; feeFreeAdjacent: boolean }> = table.carriers;
 
 export const dotFeeFreeAdjacent = (iata: string): boolean | null => lookupFeeFree(table, iata);
+/** The dashboard's name for a listed carrier, null when it is not listed. */
+export const dotCarrierName = (iata: string): string | null => table.carriers.find((c) => c.iata === iata.toUpperCase())?.name ?? null;

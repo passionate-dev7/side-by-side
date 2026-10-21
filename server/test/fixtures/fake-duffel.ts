@@ -39,6 +39,10 @@ export interface Scenario {
   taken?: (d: string) => boolean;
   /** Fee for a free seat. */
   fee?: (d: string) => number;
+  /** The airline's name for the fare, for example "Basic". */
+  fareBrand?: string;
+  /** A second cabin of the plane, numbered after the economy rows, every seat open at no fee. */
+  premium?: { rows: number; layout: number[]; cabinClass: "premium_economy" | "business" | "first" };
 }
 
 const rowOf = (d: string) => parseInt(d, 10);
@@ -124,6 +128,10 @@ export class FakeDuffel implements DuffelPort {
         fee: sc.fee,
         segmentId: `seg_${sc.id}`,
       });
+      if (sc.premium) {
+        const extra = makeSeatMap({ rows: sc.premium.rows, layout: sc.premium.layout, passengerIds: this.requestPassengerIds, cabinClass: sc.premium.cabinClass, startRow: sc.rows + 1 });
+        map.cabins.push(...extra.cabins);
+      }
       const services = new Map<string, { seat: string; passengerId: string; amount: number }>();
       for (const cabin of map.cabins) {
         for (const r of cabin.rows) {
@@ -149,6 +157,8 @@ export class FakeDuffel implements DuffelPort {
         durationMinutes: 170,
         sliceId: `sli_${sc.id}`,
         segmentId: `seg_${sc.id}`,
+        cabinClass: req.cabin,
+        fareBrand: sc.fareBrand ?? null,
         passengerIds: this.requestPassengerIds,
         expiresAt: "2026-10-21T12:30:00Z",
         liveMode: this.live,

@@ -36,6 +36,25 @@ export interface AirlineInfo {
 
 export type TogetherStatus = "TOGETHER" | "NOT_TOGETHER";
 
+export type WaiverCode = "applies" | "carrier_not_listed" | "carrier_no_commitment" | "no_young_child" | "no_seating" | "seats_chosen";
+
+/** Whether the U.S. DOT fee-free family seating commitment applies to an offer, and why, condition by condition. */
+export interface DotWaiver {
+  applies: boolean;
+  code: WaiverCode;
+  /** One sentence in the dashboard's terms. */
+  reason: string;
+  /** The dashboard's conditions for seat-assigning airlines. met = null when it cannot be known before departure. */
+  conditions: Array<{ id: string; text: string; met: boolean | null }>;
+}
+
+/** One seat the family pays for on an offer. */
+export interface SeatLine {
+  traveler: string;
+  seat: string;
+  fee: number;
+}
+
 export type DataMode = "live" | "test";
 
 /**
@@ -63,6 +82,11 @@ export interface OfferCard {
   /** Seat fees to sit together. 0 when the DOT guarantee applies or free adjacent seats exist. */
   seatFees: number;
   guarantee: boolean;
+  waiver: DotWaiver;
+  /** Each seat the family pays for, empty when the waiver applies. */
+  seatLines: SeatLine[];
+  /** What the seats would have cost without the waiver, 0 when nothing was waived. */
+  waivedFees: number;
   togetherTotal: number | null;
   together: TogetherStatus;
   /** togetherTotal minus the cheapest fare among all offers searched. */
@@ -157,6 +181,9 @@ export interface SeatMapView {
   fare: number;
   seatFees: number;
   guarantee: boolean;
+  waiver: DotWaiver;
+  seatLines: SeatLine[];
+  waivedFees: number;
   togetherTotal: number | null;
   comparison: FareComparison | null;
   noAdjacent: NoAdjacentSeats | null;

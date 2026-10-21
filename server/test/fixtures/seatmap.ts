@@ -18,6 +18,10 @@ export interface SeatMapSpec {
   exitRows?: number[];
   currency?: string;
   segmentId?: string;
+  /** Cabin class of the generated cabin. Defaults to economy. */
+  cabinClass?: "economy" | "premium_economy" | "business" | "first";
+  /** First row number. Defaults to 1. */
+  startRow?: number;
 }
 
 const LETTERS = "ABCDEFGHJK";
@@ -28,7 +32,7 @@ export function makeSeatMap(spec: SeatMapSpec): SeatMap {
   const currency = spec.currency ?? "USD";
   let svc = 0;
   const rows = Array.from({ length: spec.rows }, (_, r) => {
-    const rowNum = r + 1;
+    const rowNum = r + (spec.startRow ?? 1);
     let col = 0;
     return {
       sections: spec.layout.map((count) => ({
@@ -57,6 +61,6 @@ export function makeSeatMap(spec: SeatMapSpec): SeatMap {
     id: "sea_fixture",
     slice_id: "sli_fixture",
     segment_id: spec.segmentId ?? "seg_fixture",
-    cabins: [{ deck: 0, cabin_class: "economy", wings: null, aisles: spec.layout.length - 1, rows }],
+    cabins: [{ deck: 0, cabin_class: spec.cabinClass ?? "economy", wings: null, aisles: spec.layout.length - 1, rows }],
   };
 }

@@ -24,7 +24,7 @@ const segment = {
 const offer = {
   id: "off_1", total_amount: "812.00", total_currency: "USD", live_mode: false, expires_at: "2026-10-21T12:30:00Z",
   owner: { iata_code: "B6", name: "JetBlue" }, passengers: [{ id: "pas_a" }, { id: "pas_b" }],
-  slices: [{ id: "sli_1", duration: "PT2H50M", segments: [segment] }],
+  slices: [{ id: "sli_1", duration: "PT2H50M", fare_brand_name: "Blue Basic", segments: [{ ...segment, passengers: [{ passenger_id: "pas_a", cabin_class: "economy", cabin_class_marketing_name: "Blue" }] }] }],
 };
 
 beforeAll(async () => {
@@ -82,7 +82,7 @@ describe("Duffel adapter over the real SDK", () => {
     expect(list.url).toMatch(/offer_request_id=orq_1/);
     expect(list.url).toMatch(/sort=total_amount/);
     expect(r.offers.map((o) => o.id)).toEqual(["off_1"]);
-    expect(r.offers[0]).toMatchObject({ totalAmount: 812, airline: { iata: "B6" }, flightNumber: "B6101", durationMinutes: 170, passengerIds: ["pas_a", "pas_b"], segmentId: "seg_1", liveMode: false });
+    expect(r.offers[0]).toMatchObject({ totalAmount: 812, airline: { iata: "B6" }, flightNumber: "B6101", durationMinutes: 170, passengerIds: ["pas_a", "pas_b"], segmentId: "seg_1", liveMode: false, cabinClass: "economy", fareBrand: "Blue Basic" });
     expect(r.liveMode).toBe(false);
     expect(r.moreAvailable).toBe(false);
     expect(port().source).toBe("duffel");

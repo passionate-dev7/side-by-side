@@ -15,6 +15,8 @@ export interface GridSeat {
   section: number;
   /** Index of this seat among the elements of its section. */
   pos: number;
+  /** Cabin class of the cabin this seat sits in. */
+  cabinClass: string;
   /** Next to the cabin edge. */
   window: boolean;
   /** Next to an aisle. */
@@ -52,7 +54,11 @@ function toMinor(amount: string): number {
   return Math.round(n * 100);
 }
 
-export function buildGrid(map: SeatMap): Grid {
+/**
+ * `cabinClass`: the class the offer sells. Seats in other cabins stay on the map but cannot be booked on this fare, so a
+ * family is never seated, or priced, in a cabin it did not select.
+ */
+export function buildGrid(map: SeatMap, opts: { cabinClass?: string | null } = {}): Grid {
   const seats = new Map<string, GridSeat>();
   const rows: GridRow[] = [];
   let currency: string | null = null;
@@ -72,7 +78,8 @@ export function buildGrid(map: SeatMap): Grid {
           number = rowNum;
           const fees = new Map<string, number>();
           const serviceIds = new Map<string, string>();
-          for (const s of el.available_services) {
+          const inClass = !opts.cabinClass || cabin.cabin_class === opts.cabinClass;
+          for (const s of inClass ? el.available_services : []) {
             if (currency && currency !== s.total_currency) throw new Error(`seat map mixes currencies ${currency} and ${s.total_currency}`);
             currency = s.total_currency;
             fees.set(s.passenger_id, toMinor(s.total_amount));
@@ -80,6 +87,7 @@ export function buildGrid(map: SeatMap): Grid {
           }
           const seat: GridSeat = {
             designator: el.designator,
+            cabinClass: cabin.cabin_class,
             row: rowNum,
             section: si,
             pos,
@@ -194,7 +202,7 @@ export function gridFromLayout(layout: Layout): Grid {
           sec.map((d, pos): GridElement => {
             if (!d) return { type: "other", kind: "empty" };
             const seat: GridSeat = {
-              designator: d, row: Number(num), section: si, pos,
+              designator: d, cabinClass: "", row: Number(num), section: si, pos,
               window: (si === 0 && pos === 0) || (si === last && pos === sec.length - 1),
               aisle: (si > 0 && pos === 0) || (si < last && pos === sec.length - 1),
               name: null, exitRow: false, fees: new Map(), serviceIds: new Map(),

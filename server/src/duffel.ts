@@ -38,6 +38,10 @@ export interface OfferSummary {
   durationMinutes: number | null;
   sliceId: string;
   segmentId: string;
+  /** Cabin class the offer sells (economy, premium_economy, business, first). */
+  cabinClass: string | null;
+  /** The airline's name for the fare, for example "Basic". */
+  fareBrand: string | null;
   /** Duffel passenger ids in the same order as the request passengers. */
   passengerIds: string[];
   expiresAt: string;
@@ -137,6 +141,8 @@ function summarize(o: Omit<Offer, "available_services"> | Offer, passengerIds: s
     durationMinutes: minutes(slice.duration),
     sliceId: slice.id,
     segmentId: seg.id,
+    cabinClass: seg.passengers?.[0]?.cabin_class ?? null,
+    fareBrand: slice.fare_brand_name ?? null,
     passengerIds,
     expiresAt: o.expires_at,
     liveMode: o.live_mode,
