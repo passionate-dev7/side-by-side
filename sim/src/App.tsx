@@ -117,17 +117,17 @@ function Composer({ state }: { state: SimState }) {
   );
 }
 
-/** Demo day controls: appear when the connected server can play the airline. */
-function FixtureControl({ url }: { url: string }) {
+/** Demo day controls: appear when the connected server can play the airline. `?autorun=1` starts the run once connected. */
+function DemoControls({ state }: { state: SimState }) {
   const [on, setOn] = useState(false);
   const [note, setNote] = useState("");
   const origin = useMemo(() => {
     try {
-      return new URL(url).origin;
+      return new URL(state.url).origin;
     } catch {
       return null;
     }
-  }, [url]);
+  }, [state.url]);
   useEffect(() => {
     setOn(false);
     if (!origin) return;
@@ -135,12 +135,30 @@ function FixtureControl({ url }: { url: string }) {
     fetch(`${origin}/fixture`).then((r) => r.json()).then((b: { fixture?: boolean }) => live && setOn(b.fixture === true), () => live && setOn(false));
     return () => void (live = false);
   }, [origin]);
+  const auto = useMemo(() => new URLSearchParams(location.search).get("autorun") === "1", []);
+  const [started, setStarted] = useState(false);
+  useEffect(() => {
+    if (auto && on && !started && state.conn.status === "connected") {
+      setStarted(true);
+      void sim.runDemo();
+    }
+  }, [auto, on, started, state.conn.status]);
   if (!on || !origin) return null;
+  const { running, step, total } = state.demo;
   return (
     <div className="fixture" role="group" aria-label="Demo controls">
       <span className="tagline">Demo day</span>
+      {running ? (
+        <>
+          <span className="demo-step" role="status">Step {step} of {total}</span>
+          <button type="button" onClick={() => sim.stopDemo()}>Stop</button>
+        </>
+      ) : (
+        <button type="button" className="solid" disabled={state.conn.status !== "connected"} onClick={() => void sim.runDemo()}>Run the demo, about 80 seconds</button>
+      )}
       <button
         type="button"
+        disabled={running}
         onClick={async () => {
           const r = await fetch(`${origin}/fixture/airline-moves-seat`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
           const b = (await r.json()) as { moved?: string; from?: string | null; to?: string; error?: string };
@@ -176,7 +194,7 @@ export function App() {
           <Segmented<Theme> label="Device theme" value={state.theme} options={[["dark", "Dark"], ["light", "Light"]]} onPick={(t) => sim.setTheme(t)} />
           <Segmented<"on" | "off"> label="Spoken replies" value={state.muted ? "off" : "on"} options={[["on", "Sound on"], ["off", "Muted"]]} onPick={(v) => (v === "off") !== state.muted && sim.toggleMute()} />
         </div>
-        <FixtureControl url={state.url} />
+        <DemoControls state={state} />
         <Device state={state} />
         <Caption state={state} />
         <Composer state={state} />

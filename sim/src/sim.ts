@@ -1,6 +1,7 @@
 import type { CallToolResult, ElicitRequest, ElicitResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { Msg, ToolCall, ToolResult } from "../server/llm";
 import { mcpBackend, type Backend } from "./backend";
+import { DEMO, headline, pickOffer, speechMs, TYPE_MS, type OfferRef } from "./demo";
 import { eventLog } from "./log";
 import { connectMcp, resourceUriOf, textOf } from "./mcp";
 import { modelTextOf, runTurn, systemPrompt, toToolDefs, LlmError } from "./orchestrator";
@@ -66,6 +67,7 @@ export interface SimState {
   elicit: ElicitState | null;
   speechIn: boolean;
   speechOut: boolean;
+  demo: { running: boolean; step: number; total: number };
 }
 
 type Listen = () => void;
@@ -113,6 +115,7 @@ class Sim {
       speaking: false,
       muted: false,
       elicit: null,
+      demo: { running: false, step: 0, total: DEMO.length },
       speechIn: recognitionSupported(),
       speechOut: synthesisSupported(),
     };
@@ -328,6 +331,11 @@ class Sim {
   }
 
   private async runTool(call: ToolCall): Promise<ToolResult> {
+    const result = await this.execTool(call);
+    return { id: call.id, name: call.name, text: modelTextOf(result), isError: result.isError === true };
+  }
+
+  private async execTool(call: ToolCall): Promise<CallToolResult> {
     const id = this.push({ kind: "tool", text: call.name, status: "pending" });
     const t0 = performance.now();
     let backend = this.backend;
@@ -349,7 +357,110 @@ class Sim {
     const tool = backend?.tools.find((t) => t.name === call.name);
     if (tool) await this.present(tool, call.arguments, result);
     else await this.showCard(result.isError ? "error" : "data", call.name, textOf(result), factsOf(result.structuredContent));
-    return { id: call.id, name: call.name, text: modelTextOf(result), isError: result.isError === true };
+    return result;
+  }
+
+  // ---- scripted demo ----
+
+  private demoStop = false;
+
+  private async wait(ms: number): Promise<void> {
+    for (let left = ms; left > 0 && !this.demoStop; left -= 100) await new Promise((r) => setTimeout(r, Math.min(100, left)));
+  }
+
+  private say(text: string): void {
+    this.push({ kind: "alexa", text });
+    this.set({ caption: { text, tone: "alexa" } });
+    if (!this.state.muted) speak(text, { onStart: () => this.set({ speaking: true }), onEnd: () => this.set({ speaking: false }), onError: () => undefined });
+  }
+
+  /** The parent's line appears as if heard, one letter at a time, then lands in the thread. */
+  private async hear(text: string): Promise<void> {
+    stopSpeaking();
+    this.set({ listening: true, heard: "", caption: null });
+    for (let i = 1; i <= text.length && !this.demoStop; i++) {
+      this.set({ heard: text.slice(0, i) });
+      await new Promise((r) => setTimeout(r, TYPE_MS));
+    }
+    this.set({ listening: false });
+    this.push({ kind: "user", text });
+  }
+
+  /** Says yes to the confirmation form once it has been on screen for `ms`. */
+  private confirmAfter(ms: number): () => void {
+    let live = true;
+    const tick = setInterval(() => {
+      const e = this.state.elicit;
+      if (!live || !e) return;
+      live = false;
+      clearInterval(tick);
+      setTimeout(() => e.resolve({ action: "accept", content: { confirm: true } }), ms);
+    }, 100);
+    return () => {
+      live = false;
+      clearInterval(tick);
+    };
+  }
+
+  private async airline(origin: string, act: "assigns-seats" | "moves-child"): Promise<void> {
+    const path = act === "assigns-seats" ? "airline-assigns-seats" : "airline-moves-seat";
+    const row = eventLog.add({ source: "sys", label: `demo day: airline ${act === "assigns-seats" ? "seats the family" : "moves a child"}` });
+    const r = await fetch(`${origin}/fixture/${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const b = (await r.json()) as { assigned?: Record<string, string>; moved?: string; from?: string | null; to?: string; error?: string };
+    if (!r.ok) {
+      eventLog.update(row, { status: "error", detail: b.error });
+      throw new Error(b.error ?? `Demo day: ${path} answered ${r.status}`);
+    }
+    eventLog.update(row, { status: "ok" });
+    const text = act === "assigns-seats" ? `The airline seated the family: ${Object.entries(b.assigned ?? {}).map(([n, s]) => `${n} ${s}`).join(", ")}.` : `The airline moved ${b.moved} from ${b.from} to ${b.to}.`;
+    this.push({ kind: "info", text });
+    this.set({ caption: { text, tone: "info" } });
+  }
+
+  stopDemo(): void {
+    this.demoStop = true;
+  }
+
+  /** Plays the scripted journey against a server that can play the airline (the fixture server). */
+  async runDemo(): Promise<void> {
+    if (this.state.demo.running) return;
+    this.demoStop = false;
+    if (!this.backend) await this.connect();
+    if (!this.backend) return;
+    const origin = new URL(this.state.url).origin;
+    let offers: OfferRef[] = [];
+    this.set({ demo: { running: true, step: 0, total: DEMO.length }, busy: true });
+    const t0 = performance.now();
+    const run = eventLog.add({ source: "sys", label: "demo run", note: `${DEMO.length} steps` });
+    try {
+      for (const [i, s] of DEMO.entries()) {
+        if (this.demoStop) break;
+        this.set({ demo: { running: true, step: i + 1, total: DEMO.length } });
+        if (s.airline) {
+          await this.airline(origin, s.airline);
+          await this.wait(s.holdMs);
+          continue;
+        }
+        const call = s.call!;
+        await this.hear(s.say);
+        const args = call.iata ? { ...(call.args ?? {}), offer_id: pickOffer(offers, call.iata) } : (call.args ?? {});
+        const stopConfirm = s.confirmAfterMs ? this.confirmAfter(s.confirmAfterMs) : null;
+        const result = await this.execTool({ id: `demo-${i}`, name: call.name, arguments: args });
+        stopConfirm?.();
+        if (result.isError) throw new Error(`${call.name} answered with an error: ${textOf(result)}`);
+        const found = result.structuredContent as { kind?: string; offers?: OfferRef[] } | undefined;
+        if (found?.kind === "offers" && found.offers) offers = found.offers;
+        const voice = headline(textOf(result));
+        this.say(voice);
+        await this.wait(Math.max(s.holdMs, speechMs(voice) + 500));
+      }
+      eventLog.update(run, { status: this.demoStop ? "error" : "ok", ms: Math.round(performance.now() - t0), note: this.demoStop ? "stopped" : `${DEMO.length} steps` });
+    } catch (e) {
+      eventLog.update(run, { status: "error", ms: Math.round(performance.now() - t0), detail: e instanceof Error ? e.message : String(e) });
+      this.fail(e instanceof Error ? e.message : String(e), this.history.length);
+    } finally {
+      this.set({ demo: { running: false, step: 0, total: DEMO.length }, busy: false, listening: false, heard: "" });
+    }
   }
 
   // ---- presenting a tool result ----

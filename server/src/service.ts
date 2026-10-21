@@ -776,8 +776,10 @@ export async function stillTogether(ctx: Ctx, orderId?: string): Promise<StatusV
   for (const m of stored.members) {
     const pid = stored.passengerIds[m.id];
     const via: SeatChange["via"] = [];
-    if ((stored.seats[m.id] ?? null) !== (detail.seats[pid] ?? null)) via.push("order");
-    if (proposed.has(pid) && (stored.seats[m.id] ?? null) !== proposed.get(pid)!.to) via.push("airline-change");
+    // A first assignment under a fee-free commitment (no seat bought, then the airline assigns) is not a move.
+    if (stored.seats[m.id] === null) continue;
+    if (stored.seats[m.id] !== (detail.seats[pid] ?? null)) via.push("order");
+    if (proposed.has(pid) && stored.seats[m.id] !== proposed.get(pid)!.to) via.push("airline-change");
     if (via.length) changes.push({ name: m.name, from: stored.seats[m.id] ?? null, to: current[m.id], via });
   }
 
@@ -794,6 +796,12 @@ export async function stillTogether(ctx: Ctx, orderId?: string): Promise<StatusV
     .filter((v) => v.reason.includes("no adult"))
     .map((v) => ({ name: nameOf.get(v.memberId)!, role: toTraveler(byId.get(v.memberId)!).role, seat: current[v.memberId], from: stored.seats[v.memberId] ?? null, reason: v.reason }));
 
+  // Seats the airline assigned after a fee-free booking become the baseline later checks are measured against.
+  const unseated = stored.members.some((m) => stored.seats[m.id] === null);
+  if (stored.strategy === "airline-guarantee" && unseated && stored.members.every((m) => detail.seats[stored.passengerIds[m.id]]) && together) {
+    ctx.store.saveOrder(ctx.account, { ...stored, seats: Object.fromEntries(stored.members.map((m) => [m.id, detail.seats[stored.passengerIds[m.id]]])) });
+  }
+
   const reseat = !together && unassigned.length === 0 && affected.length ? await proposeReseat(ctx, stored, current, detail.currency) : null;
   const airlineChanges = { open: detail.pendingChanges.length, scheduleChanged: detail.pendingChanges.some((c) => c.scheduleChanged) };
 
@@ -804,7 +812,9 @@ export async function stillTogether(ctx: Ctx, orderId?: string): Promise<StatusV
     voice = changes.length ? `Yes, you are still sitting together, although seats moved: ${changes.map((c) => `${c.name} ${c.from ?? "none"} to ${c.to}`).join(", ")}.` : `Yes. ${seatList(seats)}. Nothing has changed.`;
   } else {
     const alone = affected.map((a) => a.name);
-    voice = `No. ${changes.map((c) => `${c.name} moved from ${c.from ?? "none"} to ${c.to}`).join(", ")}.${alone.length ? ` ${alone.join(" and ")} ${alone.length > 1 ? "are" : "is"} no longer beside an adult.` : ""}`;
+    voice = changes.length
+      ? `No. ${changes.map((c) => `${c.name} moved from ${c.from ?? "none"} to ${c.to}`).join(", ")}.${alone.length ? ` ${alone.join(" and ")} ${alone.length > 1 ? "are" : "is"} no longer beside an adult.` : ""}`
+      : `No. ${affected.map((a) => `${a.name} is in ${a.seat}, not beside an adult`).join(". ")}.`;
     if (reseat?.status === "proposal") {
       const how = reseat.moves.map((m) => `${m.name} to ${m.to}`).join(", ");
       voice += ` I can see seats that put everyone together again: ${how}. ${

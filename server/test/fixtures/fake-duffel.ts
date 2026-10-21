@@ -259,6 +259,12 @@ export class FakeDuffel implements DuffelPort {
     ord.pendingChanges.push({ id: `aic_${++this.seq}`, createdAt: NOW.toISOString(), seatChanges: [{ passengerId, from, to: newSeat }], scheduleChanged: false });
   }
 
+  /** The airline assigns seats to an order that bought none (a fee-free family seating commitment): an assignment, not a change. */
+  airlineAssignsSeats(orderId: string, seatByPassenger: Record<string, string>) {
+    const ord = this.orders.get(orderId)!;
+    Object.assign(ord.seats, seatByPassenger);
+  }
+
   /** The airline records a change but the order's seats still read the old ones until the change is accepted. */
   airlineProposesSeat(orderId: string, passengerId: string, newSeat: string) {
     const ord = this.orders.get(orderId)!;

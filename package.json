@@ -4,11 +4,15 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
-  "workspaces": ["server", "sim"],
+  "workspaces": [
+    "server",
+    "sim"
+  ],
   "scripts": {
     "dev:server": "npm run dev -w server",
     "dev:sim": "npm run dev -w sim",
     "test": "npm test -w server && npm test -w sim",
-    "typecheck": "npm run typecheck -w server && npm run typecheck -w sim"
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w sim",
+    "demo": "node scripts/demo.mjs"
   }
 }

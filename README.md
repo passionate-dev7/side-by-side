@@ -32,24 +32,30 @@ npm run dev -w sim             # http://127.0.0.1:5173
 
 `npm run fixture -w server` serves the same tools over the same transport on the same port, backed by an in-memory Duffel service that enforces Duffel's order rules (payment equals fare plus seat services, services exist and are unused, expired offers are refused). It is the quickest way to run the whole journey. Next to the device, Demo day controls let the airline move a child after booking.
 
-## A short scripted flow
+## Demo run
 
-The whole journey, by voice or typing, against the fixture server:
+```bash
+npm run demo              # starts the fixture server and the Echo Show client, prints the URL, needs no credentials
+npm run demo -- --open    # also opens it in the deepsurge browser profile through bhn
+```
+
+`http://127.0.0.1:5173/?autorun=1` plays the whole journey in about 80 seconds. The parent's lines appear as heard, Alexa answers by voice and caption, and the wire panel fills with `initialize` (negotiated protocol version), `tools/list` and every `tools/call` with its latency in ms:
 
 1. `save_family`: Dad 40, Mum 38, Mia 6, Leo 9.
-2. `find_family_flights` JFK to MCO: the list says how many fares had their seat maps read, and every flight card shows its base fare, each seat fee, the DOT fee waiver with its reason, and the family total.
-3. `show_seats` on JetBlue: Delta has the lowest fare ($760) and costs $850 for the family to sit together; JetBlue is $812 fare and $0 in seat fees under the DOT commitment, $812 for the family. The seat map shows both side by side.
+2. `find_family_flights` JFK to MCO: the header says how many fares were checked, and every flight card shows its base fare, each seat fee, the DOT fee waiver with its reason, and the family total.
+3. `show_seats` on JetBlue: Delta has the lowest fare ($760) and costs $850 for the family to sit together; JetBlue is $812 fare and $0 in seat fees under the DOT commitment, $812 for the family. Both sit side by side on the seat map.
 4. `show_seats` on United: no two open seats are side by side, so the screen says so and offers the flights that work.
-5. `book_together`, then Demo day moves Mia to 30F, then `still_together`: the view names Mia, her old and new seat, and proposes seats that put her beside an adult again.
+5. `book_together`: the confirmation form, then the booking reference.
+6. Demo day: the airline seats the family, `still_together` says yes; the airline moves Mia to 30F, `still_together` names Mia, her old and new seat, and proposes seats that put her beside an adult again.
 
-The wire panel lists `initialize` with the negotiated protocol version, `tools/list`, and each `tools/call` with its latency in ms.
+Flights are picked by carrier, never by position, so the run reads the same on every start. Without the script, the same journey works by voice or typing.
 
-The simulator's tool-choosing model is configured by environment variable names only: `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` / `OPENROUTER_API_KEY` (optionally `OPENAI_BASE_URL`), or `AWS_BEARER_TOKEN_BEDROCK` for Amazon Bedrock through its OpenAI-compatible endpoint (`openai.gpt-oss-120b` with tool calling, the default whenever that variable is set; `npx tsx sim/scripts/mantle-turn.ts` runs a full save_family then find_family_flights turn against the fixture server), or `AWS_PROFILE` with `AWS_REGION` for Bedrock Converse. `LLM_PROVIDER` and `LLM_MODEL` pick one explicitly. Keys stay in the Vite server process.
+The Echo Show client's tool-choosing model is configured by environment variable names only: `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` / `OPENROUTER_API_KEY` (optionally `OPENAI_BASE_URL`), or `AWS_BEARER_TOKEN_BEDROCK` for Amazon Bedrock through its OpenAI-compatible endpoint (`openai.gpt-oss-120b` with tool calling, the default whenever that variable is set; `npx tsx sim/scripts/mantle-turn.ts` runs a full save_family then find_family_flights turn against the fixture server), or `AWS_PROFILE` with `AWS_REGION` for Bedrock Converse. `LLM_PROVIDER` and `LLM_MODEL` pick one explicitly. Keys stay in the Vite server process.
 
 ## Checks
 
 ```bash
-npm test                          # server integration, solver, service, DOT table and lint tests, plus the simulator's wire and spoken-text tests
+npm test                          # server integration, solver, service, DOT table and lint tests, plus the Echo Show client's wire, spoken-text and demo-plan tests
 npm run lint:tools -w server      # exits 1 on a poisoned tool description
 npm run lint:tools -w server -- --plant   # plants one, exits 1
 npx tsx spikes/seats/spike.ts     # prints the together-price table and latency against Alexa's 500 ms budget
