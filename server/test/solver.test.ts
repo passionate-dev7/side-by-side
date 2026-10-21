@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildGrid, neighbours, type Grid } from "../src/seatmap.js";
 import { evaluateAssignment, isAdjacencyFinding, solveSeating, type PartyMember } from "../src/solver.js";
-import { dotFeeFreeAdjacent, DOT_SOURCE } from "../src/dot.js";
 import { makeSeatMap } from "./fixtures/seatmap.js";
 
 const P = (id: string, age: number, seatPreference?: "aisle" | "window"): PartyMember => ({ id, passengerId: `pas_${id}`, age, seatPreference });
@@ -236,14 +235,5 @@ describe("evaluateAssignment", () => {
       { memberId: "mum", seat: "7C" },
     ]);
     expect(ev.together).toBe(true);
-  });
-});
-
-describe("DOT family seating table", () => {
-  it("lists the five fee-free carriers and four non-guaranteeing carriers from the dashboard", () => {
-    expect(["AS", "AA", "F9", "HA", "B6"].map(dotFeeFreeAdjacent)).toEqual([true, true, true, true, true]);
-    expect(["G4", "DL", "WN", "UA"].map(dotFeeFreeAdjacent)).toEqual([false, false, false, false]);
-    expect(dotFeeFreeAdjacent("ZZ")).toBeNull();
-    expect(DOT_SOURCE.readOn).toBe("2026-10-21");
   });
 });

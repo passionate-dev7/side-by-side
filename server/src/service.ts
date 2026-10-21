@@ -176,7 +176,7 @@ function provenanceOf(ctx: Ctx, iata: string, liveMode: boolean, placed: boolean
     source: ctx.duffel?.source ?? "duffel",
     offer: mode,
     seatMap: mode,
-    rule: { listed: dotFeeFreeAdjacent(iata) !== null, readOn: DOT_SOURCE.readOn, dashboardUpdated: DOT_SOURCE.dashboardUpdated },
+    rule: { listed: dotFeeFreeAdjacent(iata) !== null, url: DOT_SOURCE.url, readOn: DOT_SOURCE.readOn, dashboardUpdated: DOT_SOURCE.dashboardUpdated },
     booking: { mode, placed },
   };
 }

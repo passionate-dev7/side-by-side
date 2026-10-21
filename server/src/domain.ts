@@ -47,7 +47,7 @@ export interface Provenance {
   offer: DataMode;
   seatMap: DataMode;
   /** The DOT family seating table. `listed` is false when this carrier is not on the dashboard, so no guarantee is assumed. */
-  rule: { listed: boolean; readOn: string; dashboardUpdated: string };
+  rule: { listed: boolean; url: string; readOn: string; dashboardUpdated: string };
   /** Mode a booking is made in. `placed` is true once an order exists. */
   booking: { mode: DataMode; placed: boolean };
 }

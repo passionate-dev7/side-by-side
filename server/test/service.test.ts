@@ -80,7 +80,7 @@ describe("find_family_flights", () => {
       source: "fixture",
       offer: "test",
       seatMap: "test",
-      rule: { listed: true, readOn: "2026-10-21", dashboardUpdated: "2025-09-05" },
+      rule: { listed: true, url: "https://www.transportation.gov/airconsumer/airline-family-seating-dashboard", readOn: "2026-10-21", dashboardUpdated: "2025-09-05" },
       booking: { mode: "test", placed: false },
     });
     expect([v.searched, v.evaluated, v.moreAvailable]).toEqual([4, 4, false]);

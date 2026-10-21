@@ -1,0 +1,22 @@
+{
+  "source": {
+    "name": "U.S. DOT Airline Family Seating Dashboard",
+    "url": "https://www.transportation.gov/airconsumer/airline-family-seating-dashboard",
+    "readOn": "2026-10-21",
+    "dashboardUpdated": "2025-09-05",
+    "method": "Table read from the live page in a browser: row \"Guarantees adjacent seats for a child 13 or under and an accompanying adult at no additional cost for all fare types\", columns Alaska, Allegiant, American, Delta, Frontier, Hawaiian, JetBlue, Southwest, United."
+  },
+  "childMaxAge": 13,
+  "conditions": "Subject to the dashboard's limited conditions: child and accompanying adult on the same reservation, adjacent seats available at booking, and seats chosen for everyone or for no one.",
+  "carriers": [
+    { "iata": "AS", "name": "Alaska", "feeFreeAdjacent": true },
+    { "iata": "G4", "name": "Allegiant", "feeFreeAdjacent": false },
+    { "iata": "AA", "name": "American", "feeFreeAdjacent": true },
+    { "iata": "DL", "name": "Delta", "feeFreeAdjacent": false },
+    { "iata": "F9", "name": "Frontier", "feeFreeAdjacent": true },
+    { "iata": "HA", "name": "Hawaiian", "feeFreeAdjacent": true },
+    { "iata": "B6", "name": "JetBlue", "feeFreeAdjacent": true },
+    { "iata": "WN", "name": "Southwest", "feeFreeAdjacent": false },
+    { "iata": "UA", "name": "United", "feeFreeAdjacent": false }
+  ]
+}
