@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "build:ui": "node scripts/build-ui.mjs",
-    "dev": "npm run build:ui && tsx watch src/index.ts",
-    "start": "npm run build:ui && tsx src/index.ts",
+    "dev": "npm run build:ui && tsx watch --env-file-if-exists=../.env src/index.ts",
+    "start": "npm run build:ui && tsx --env-file-if-exists=../.env src/index.ts",
     "test": "npm run build:ui && vitest run",
     "typecheck": "tsc -p .",
     "fixture": "npm run build:ui && tsx scripts/fixture-server.ts",
