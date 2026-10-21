@@ -2,6 +2,7 @@ import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { LlmResponse, Msg, ToolCall, ToolDef, ToolResult } from "../server/llm";
 import { eventLog } from "./log";
 import { textOf, visibleToModel } from "./mcp";
+import { speakable } from "./speakable";
 
 export const MAX_STEPS = 6;
 
@@ -75,7 +76,8 @@ export interface TurnOutcome {
 export async function runTurn(history: Msg[], userText: string, deps: TurnDeps): Promise<TurnOutcome> {
   history.push({ role: "user", text: userText });
   for (let step = 0; step < MAX_STEPS; step++) {
-    const out = await complete(deps.system, history, deps.tools, deps.model);
+    const raw = await complete(deps.system, history, deps.tools, deps.model);
+    const out = { ...raw, text: speakable(raw.text) };
     history.push({ role: "assistant", text: out.text, toolCalls: out.toolCalls });
     if (!out.toolCalls.length) return { text: out.text, complete: true };
     const results: ToolResult[] = [];

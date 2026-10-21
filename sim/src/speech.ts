@@ -1,3 +1,4 @@
+import { speakable } from "./speakable";
 interface RecognitionAlternative {
   transcript: string;
 }
@@ -108,7 +109,7 @@ export function speak(text: string, handlers: { onStart(): void; onEnd(): void; 
   }
   const synth = window.speechSynthesis;
   synth.cancel();
-  const u = new SpeechSynthesisUtterance(text);
+  const u = new SpeechSynthesisUtterance(speakable(text));
   const voices = synth.getVoices();
   u.voice = voices.find((v) => v.lang === "en-US" && /samantha|aria|jenny|google us english|female/i.test(v.name)) ?? voices.find((v) => v.lang.startsWith("en")) ?? null;
   u.rate = 1.02;
