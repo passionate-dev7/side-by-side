@@ -180,6 +180,13 @@ describe("tools through the SDK client", () => {
     await client.close();
   });
 
+  it("an optional argument sent as null reads as absent, as language models send it", async () => {
+    const client = await connect();
+    const res = await client.callTool({ name: "still_together", arguments: { order_id: null } });
+    expect((res.structuredContent as { code: string }).code).toBe("no_booking");
+    await client.close();
+  });
+
   it("a tool that cannot proceed still answers with a structured, speakable error", async () => {
     const client = await connect();
     const res = await client.callTool({ name: "show_seats", arguments: { offer_id: "off_that_does_not_exist" } });

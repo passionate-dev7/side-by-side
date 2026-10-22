@@ -9,6 +9,8 @@ const iata = z
   .string()
   .regex(/^[A-Za-z]{3}$/, "three letter airport code")
   .transform((s) => s.toUpperCase());
+/** Language models send null for an optional argument they have no value for; read it as absent. */
+const opt = <T extends z.ZodType>(t: T) => t.nullish().transform((v) => v ?? undefined);
 const offerId = z.string().min(1).max(80).describe("Flight offer id from the ranked list");
 
 export const register: ToolModule = (server, ctx) => {
@@ -32,17 +34,17 @@ export const register: ToolModule = (server, ctx) => {
             z.object({
               name: z.string().min(1).max(40).describe("First name"),
               age: z.number().int().min(2).max(120).describe("Age on the travel date"),
-              seat_preference: z.enum(["aisle", "window"]).optional().describe("Preferred seat position"),
-              born_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Date of birth, YYYY-MM-DD"),
-              gender: z.enum(["m", "f"]).optional().describe("Gender on the passport"),
+              seat_preference: opt(z.enum(["aisle", "window"])).describe("Preferred seat position"),
+              born_on: opt(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).describe("Date of birth, YYYY-MM-DD"),
+              gender: opt(z.enum(["m", "f"])).describe("Gender on the passport"),
             }),
           )
           .min(1)
           .max(6)
           .describe("Everyone traveling, 1 to 6 people"),
-        family_name: z.string().min(1).max(60).optional().describe("Surname on the tickets"),
-        email: z.string().email().optional().describe("Contact email"),
-        phone_number: z.string().min(6).max(20).optional().describe("Contact phone with country code"),
+        family_name: opt(z.string().min(1).max(60)).describe("Surname on the tickets"),
+        email: opt(z.string().email()).describe("Contact email"),
+        phone_number: opt(z.string().min(6).max(20)).describe("Contact phone with country code"),
       },
       annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
       _meta: ui,
@@ -68,7 +70,7 @@ export const register: ToolModule = (server, ctx) => {
         origin: iata.describe("Departure airport code, for example JFK"),
         destination: iata.describe("Arrival airport code, for example MCO"),
         departure_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("Departure date, YYYY-MM-DD"),
-        cabin: z.enum(["economy", "premium_economy", "business", "first"]).default("economy").describe("Cabin class"),
+        cabin: z.enum(["economy", "premium_economy", "business", "first"]).nullish().transform((v) => v ?? "economy").describe("Cabin class"),
       },
       annotations: { readOnlyHint: true, openWorldHint: true },
       _meta: ui,
@@ -98,8 +100,8 @@ export const register: ToolModule = (server, ctx) => {
       inputSchema: {
         offer_id: offerId,
         traveler: z.string().min(1).max(40).describe("First name of the traveler to move"),
-        seat: z.string().regex(/^\d{1,2}[A-Za-z]$/).optional().describe("Seat designator such as 14C"),
-        position: z.enum(["aisle", "window"]).optional().describe("Aisle or window, when no seat is named"),
+        seat: opt(z.string().regex(/^\d{1,2}[A-Za-z]$/)).describe("Seat designator such as 14C"),
+        position: opt(z.enum(["aisle", "window"])).describe("Aisle or window, when no seat is named"),
       },
       annotations: { readOnlyHint: false, idempotentHint: true, openWorldHint: false },
       _meta: ui,
@@ -121,7 +123,7 @@ export const register: ToolModule = (server, ctx) => {
       description: "Book the flight with the chosen seats in one order, after checking the seats are still open and every child sits beside an adult.",
       inputSchema: {
         offer_id: offerId,
-        confirmed: z.boolean().default(false).describe("True once the traveler has agreed to the price"),
+        confirmed: z.boolean().nullish().transform((v) => v ?? false).describe("True once the traveler has agreed to the price"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       _meta: ui,
@@ -135,7 +137,7 @@ export const register: ToolModule = (server, ctx) => {
     {
       title: "Still together",
       description: "Check a booked trip: read the current seats and any airline changes, and say whether the family still sits together.",
-      inputSchema: { order_id: z.string().min(1).max(80).optional().describe("Order id or booking reference, defaults to the latest booking") },
+      inputSchema: { order_id: opt(z.string().min(1).max(80)).describe("Order id or booking reference, defaults to the latest booking") },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
       _meta: ui,
     },
