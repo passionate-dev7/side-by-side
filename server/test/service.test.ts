@@ -168,6 +168,19 @@ describe("find_family_flights", () => {
     expect(row.seatFees).toBe(moved.seatFees);
   });
 
+  it("a lowest fare whose seat map was not read is listed as unread and is never claimed to lose", async () => {
+    fake = new FakeDuffel([SCENARIOS[2], SCENARIOS[0]]);
+    fake.noSeatMap.add("off_united");
+    ctx = createCtx({ duffel: fake, store: openStore(":memory:"), now: () => NOW });
+    saveFamily(ctx, FAMILY);
+    await findFamilyFlights(ctx, SEARCH);
+    const jb = await showSeats(ctx, "off_jetblue");
+    const ua = jb.comparison!.rows.find((r) => r.airline.iata === "UA")!;
+    expect(ua).toMatchObject({ fare: 795, familyTotal: null, seatMap: false, tags: ["cheapest-fare"] });
+    expect(jb.comparison!.cheapestFareLoses).toBe(false);
+    expect(jb.voice).not.toMatch(/lowest fare at/);
+  });
+
   it("when the lowest fare cannot seat the family at all, the comparison says so instead of pricing it", async () => {
     fake = new FakeDuffel([SCENARIOS[2], SCENARIOS[0]]);
     ctx = createCtx({ duffel: fake, store: openStore(":memory:"), now: () => NOW });
@@ -175,7 +188,7 @@ describe("find_family_flights", () => {
     await findFamilyFlights(ctx, SEARCH);
     const jb = await showSeats(ctx, "off_jetblue");
     const ua = jb.comparison!.rows.find((r) => r.airline.iata === "UA")!;
-    expect(ua).toMatchObject({ fare: 795, familyTotal: null, seatFees: null, tags: ["cheapest-fare"] });
+    expect(ua).toMatchObject({ fare: 795, familyTotal: null, seatFees: null, seatMap: true, tags: ["cheapest-fare"] });
     expect(jb.comparison!.cheapestFareLoses).toBe(true);
     expect(jb.voice).toMatch(/United has the lowest fare at \$795, but your family cannot sit together on it/);
   });

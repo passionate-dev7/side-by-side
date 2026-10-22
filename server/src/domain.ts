@@ -138,8 +138,10 @@ export interface FareRow {
   /** Seat fees to sit together: 0 under the DOT guarantee, null when this flight cannot seat the family together. */
   seatFees: number | null;
   guarantee: boolean;
-  /** fare + seatFees, or null when the family cannot sit together on this flight. */
+  /** fare + seatFees, or null when the family cannot sit together on this flight or its seat map was not read. */
   familyTotal: number | null;
+  /** False when this flight's seat map was not read (the airline publishes none, or it was not among the cheapest read). */
+  seatMap: boolean;
   tags: FareTag[];
 }
 

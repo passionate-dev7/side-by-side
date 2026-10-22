@@ -184,7 +184,7 @@ export class SeatMapScreen {
           "div",
           { class: `cmp-row${r.tags.includes("lowest-total") ? " best" : ""}${r.tags.includes("this-flight") ? " mine" : ""}`, "data-offer": r.offerId },
           h("span", { class: "who" }, h("b", {}, r.airline.name), h("i", {}, [...r.tags].sort().reverse().map((t) => words[t]).join(" · "))),
-          h("span", { class: "n" }, h("b", { class: r.familyTotal === null ? "tot none" : "tot" }, r.familyTotal === null ? "Not together" : money(r.familyTotal, cur)), h("i", {}, `fare ${money(r.fare, cur)}`)),
+          h("span", { class: "n" }, h("b", { class: r.familyTotal === null ? "tot none" : "tot" }, r.familyTotal !== null ? money(r.familyTotal, cur) : r.seatMap ? "Not together" : "Seats not read"), h("i", {}, `fare ${money(r.fare, cur)}`)),
         ),
       ),
     );

@@ -319,6 +319,7 @@ function fareRow(entry: OfferEntry): Omit<FareRow, "tags"> {
     seatFees: p?.together ? p.seatFees : null,
     guarantee: p?.guarantee ?? false,
     familyTotal: p?.total ?? null,
+    seatMap: !!entry.maps,
   };
 }
 
@@ -340,7 +341,8 @@ function compareFares(ctx: Ctx, entry: OfferEntry, now: { seatFees: number | nul
   add(rowOf(entry), "this-flight");
   add(lowest, "lowest-total");
   const rows = Object.values(tagged).sort((a, b) => a.fare - b.fare);
-  return { rows, cheapestFareLoses: !!lowest && lowest.offerId !== cheapest.offerId && (cheapest.familyTotal === null || lowest.familyTotal! < cheapest.familyTotal) };
+  // A fare whose seat map was not read has no family total to lose by: only a priced fare can be beaten.
+  return { rows, cheapestFareLoses: !!lowest && lowest.offerId !== cheapest.offerId && cheapest.seatMap && (cheapest.familyTotal === null || lowest.familyTotal! < cheapest.familyTotal) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
