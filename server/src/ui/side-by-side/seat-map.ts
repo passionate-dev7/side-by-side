@@ -17,6 +17,7 @@ export class SeatMapScreen {
   private busy = false;
   private suppressClick = false;
   private cabinEl: HTMLElement | null = null;
+  private tight = false;
   private stopDrag: (() => void) | null = null;
 
   constructor(view: SeatMapView, private readonly ctx: Ctx) {
@@ -51,9 +52,11 @@ export class SeatMapScreen {
     const v = this.view;
     const sub = [v.airline.name, v.route.flightNumber].filter(Boolean).join(" ");
     const flagged = new Set(v.violations.map((x) => x.travelerId));
+    // A row of eight or more seats (a 3-3-3 or 3-4-3 cabin) leaves each seat about 40px: names get a tighter chip so they are never cut.
+    this.tight = v.rows.some((r) => r.cells.filter((c) => c.kind === "seat").length >= 8);
     this.cabinEl = h(
       "section",
-      { class: "cabin", "aria-label": "Seat map", "aria-busy": this.busy ? "true" : null },
+      { class: `cabin${this.tight ? " tight" : ""}`, "aria-label": "Seat map", "aria-busy": this.busy ? "true" : null },
       ...v.rows.flatMap((r, i) => {
         const prev = v.rows[i - 1];
         const skipped = prev && r.row - prev.row > 1 ? [this.skip(prev.row + 1, r.row - 1)] : [];
@@ -78,7 +81,7 @@ export class SeatMapScreen {
   }
 
   private row(rowNo: number, cells: Cell[], flagged: Set<string>): HTMLElement {
-    const cols = cells.map((c) => (c.kind === "aisle" ? "16px" : "minmax(0, 1fr)")).join(" ");
+    const cols = cells.map((c) => (c.kind === "aisle" ? (this.tight ? "10px" : "16px") : "minmax(0, 1fr)")).join(" ");
     return h("div", { class: "row", style: `--cols: ${cols}` }, h("span", { class: "rownum" }, String(rowNo)), ...cells.map((c) => this.cell(c, flagged)));
   }
 
@@ -176,14 +179,12 @@ export class SeatMapScreen {
       "section",
       { class: `cmp${c.cheapestFareLoses ? " loses" : ""}`, "aria-label": "Fare compared with family total" },
       c.cheapestFareLoses ? h("div", { class: "cmp-note" }, "The lowest fare is not the lowest total") : null,
-      h("div", { class: "cmp-row cmp-head" }, h("span", {}), h("span", {}, "Fare"), h("span", {}, "Family")),
       ...c.rows.map((r) =>
         h(
           "div",
           { class: `cmp-row${r.tags.includes("lowest-total") ? " best" : ""}${r.tags.includes("this-flight") ? " mine" : ""}`, "data-offer": r.offerId },
           h("span", { class: "who" }, h("b", {}, r.airline.name), h("i", {}, [...r.tags].sort().reverse().map((t) => words[t]).join(" · "))),
-          h("span", { class: "n" }, money(r.fare, cur)),
-          h("span", { class: "n tot" }, r.familyTotal === null ? "No seats" : money(r.familyTotal, cur)),
+          h("span", { class: "n" }, h("b", { class: r.familyTotal === null ? "tot none" : "tot" }, r.familyTotal === null ? "Not together" : money(r.familyTotal, cur)), h("i", {}, `fare ${money(r.fare, cur)}`)),
         ),
       ),
     );

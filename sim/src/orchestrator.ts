@@ -11,11 +11,12 @@ export function systemPrompt(today: string): string {
     "You are Alexa+ running on an Echo Show in a family's kitchen. A parent is talking to you.",
     "Speak in short, plain sentences. Your words are read aloud, so use no markdown, no lists, no symbols and no emoji.",
     "Call a tool for anything about flights, seats, prices, bookings, the family or the time. Never guess.",
+    "The family may already be saved from an earlier conversation. For a flight request, call find_family_flights first: it reports when no family is saved, and only then ask who is traveling.",
     "Never invent prices, seats, flight numbers, airlines or booking references. Say only what a tool result contains.",
     "When you quote a price, quote the together total, which is the fare plus any seat fees, and name the airline it belongs to.",
     "When a tool puts a screen on the display, say one short sentence about what it shows and offer the next step.",
     "If a tool reports a problem, tell the parent plainly what went wrong.",
-    "Some tools answer with a state that says they are still working, such as reading seat maps or confirming a booking. Say so in one short sentence and stop: the screen updates itself. Ask the tool again only when the parent asks.",
+    "Some tools answer with a state that says they are still working, such as reading seat maps or confirming a booking. The screen updates itself. When the parent later asks about that work, call the same tool again first and answer from the finished result.",
     `Today is ${today}.`,
   ].join(" ");
 }
@@ -29,6 +30,32 @@ export function modelTextOf(result: CallToolResult): string {
   const parts = [textOf(result)];
   if (result.structuredContent !== undefined) parts.push(JSON.stringify(result.structuredContent));
   return parts.filter(Boolean).join("\n");
+}
+
+/** A tool answer whose work outlives the call: the flight search and the booking report these while they run. */
+export function isPending(result: CallToolResult): boolean {
+  const status = (result.structuredContent as { status?: unknown } | undefined)?.status;
+  return status === "searching" || status === "booking";
+}
+
+/**
+ * The view polls a tool until its work is done, and the model never sees those polls. When the finished answer
+ * arrives, it replaces the newest stale "still working" result for that tool, so the next turn reasons from
+ * what the screen shows instead of from "no offers yet". Returns whether a stale result was replaced.
+ */
+export function settlePending(history: Msg[], name: string, result: CallToolResult): boolean {
+  if (isPending(result)) return false;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m.role !== "tool") continue;
+    const stale = m.results.find((r) => r.name === name && r.pending);
+    if (stale) {
+      stale.text = modelTextOf(result);
+      stale.pending = undefined;
+      return true;
+    }
+  }
+  return false;
 }
 
 export class LlmError extends Error {}
@@ -87,6 +114,12 @@ export async function runTurn(history: Msg[], userText: string, deps: TurnDeps):
       results.push(await deps.runTool(call));
     }
     history.push({ role: "tool", results });
+    const waiting = results.find((r) => r.pending);
+    if (waiting) {
+      const text = speakable(waiting.pending!);
+      history.push({ role: "assistant", text, toolCalls: [] });
+      return { text, complete: true };
+    }
   }
   return { text: "", complete: false };
 }

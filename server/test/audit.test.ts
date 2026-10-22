@@ -15,6 +15,8 @@ describe("flight card arithmetic text", () => {
   it("a paid card lists each seat fee beside its seat and the sum", () => {
     const c = card({ fare: 760, seatFees: 90, togetherTotal: 850, seatLines: [{ traveler: "Mum", seat: "22D", fee: 45 }, { traveler: "Leo", seat: "22E", fee: 45 }, { traveler: "Dad", seat: "14A", fee: 0 }] });
     expect(breakdown(c, "USD")).toBe("Fare $760 + seats $90 (22D $45, 22E $45)");
+    const four = card({ fare: 327, seatFees: 80, seatLines: ["30J", "28C", "30H", "30K"].map((seat) => ({ traveler: "x", seat, fee: 20 })) });
+    expect(breakdown(four, "USD")).toBe("Fare $327 + 4 seats at $20");
   });
   it("a card that cannot seat the family shows the fare and no seat fee", () => {
     expect(breakdown(card({ together: "NOT_TOGETHER", togetherTotal: null }), "USD")).toBe("Fare $812");

@@ -54,6 +54,8 @@ describe("book_together answers with the booking state and finishes the order in
     expect(after.orderId).toBe(fake.orders.keys().next().value);
     expect(fake.calls.filter((c) => c === "createOrder")).toHaveLength(1);
     expect(ctx.store.latestOrder("default")).toMatchObject({ bookingReference: "FXT4KQ" });
+    expect(ctx.store.getOrder("default", "fxt4kq")?.orderId).toBe(after.orderId);
+    expect(ctx.store.getOrder("default", "ZZZZZZ")).toBeNull();
   });
 
   it("saving the family again starts a fresh trip: finished bookings and searches are forgotten, a booking in flight is not", async () => {

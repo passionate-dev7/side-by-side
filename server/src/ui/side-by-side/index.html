@@ -135,6 +135,9 @@ button:disabled { cursor: not-allowed; }
 .trav.is-child { background: var(--card); color: var(--ink); border: 3px solid var(--accent); border-radius: var(--r-4); }
 .trav.is-long { font-size: var(--fs-note); }
 .trav.is-xlong { font-size: 16px; padding: 0 var(--sp-1); }
+.cabin.tight .row { gap: var(--sp-1); }
+.cabin.tight .trav { padding: 0; }
+.cabin.tight .trav .nm, .cabin.tight .trav.is-long .nm, .cabin.tight .trav.is-xlong .nm { font-size: 15px; letter-spacing: -0.02em; }
 .trav[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--ink); }
 .trav.is-flagged::after { content: "!"; position: absolute; top: -10px; right: -8px; width: 26px; height: 26px; border-radius: 50%; background: var(--warn); color: var(--accent-ink);
   font-size: var(--fs-label); font-weight: 700; line-height: 1; display: grid; place-items: center; }
@@ -181,16 +184,16 @@ button:disabled { cursor: not-allowed; }
 
 /* fare versus family total */
 .cmp { display: grid; gap: var(--sp-2); }
-.cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) 60px 66px; gap: var(--sp-3); align-items: center; font-size: var(--fs-note); min-width: 0; }
-.cmp-head { font-size: 14px; color: var(--muted); }
-.cmp-head span:not(:first-child) { text-align: right; }
+.cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; font-size: var(--fs-note); min-width: 0; }
 .cmp-note { font-size: var(--fs-note); color: var(--warn); font-weight: 600; line-height: 1.15; }
 .cmp-row .who { display: grid; min-width: 0; line-height: 1.1; }
-.cmp-row .who b { font-size: var(--fs-label); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-row .who b { font-size: var(--fs-note); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmp-row .who i { font-style: normal; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cmp-row .n { text-align: right; }
+.cmp-row .n { display: grid; justify-items: end; line-height: 1.1; }
+.cmp-row .n i { font-style: normal; font-size: 14px; color: var(--muted); white-space: nowrap; }
 .cmp-row .tot { font-weight: 700; }
 .cmp-row.best .tot { color: var(--ok); }
+.cmp-row .tot.none { font-size: var(--fs-note); color: var(--warn); }
 .cmp-row.mine { border-left: 3px solid var(--accent); padding-left: var(--sp-3); margin-left: calc(-1 * var(--sp-3) - 3px); }
 
 /* provenance */

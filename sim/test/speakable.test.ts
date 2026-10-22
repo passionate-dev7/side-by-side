@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runTurn } from "../src/orchestrator";
+import { isPending, runTurn, settlePending } from "../src/orchestrator";
 import { speakable } from "../src/speakable";
 import type { Msg } from "../server/llm";
 
@@ -60,5 +60,36 @@ describe("runTurn speaks and records the stripped reply", () => {
     stubLlm({ text: "", toolCalls: [{ id: "1", name: "still_together", arguments: {} }] }, { text: "## Result\n**Not together.** Mia is in `30F`.", toolCalls: [] });
     const out = await runTurn([], "are we together", deps);
     expect(out.text).toBe("Result Not together. Mia is in 30F.");
+  });
+});
+
+describe("work that outlives a call", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const searching = { structuredContent: { kind: "offers", status: "searching", offers: [] }, content: [{ type: "text" as const, text: "I am searching." }] };
+  const ready = { structuredContent: { kind: "offers", status: "ready", offers: [{ offerId: "off_1" }] }, content: [{ type: "text" as const, text: "Duffel Airways is best." }] };
+
+  it("a searching answer ends the turn on the tool's spoken line and never polls the model again", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ text: "", toolCalls: [{ id: "1", name: "find_family_flights", arguments: {} }] }), { status: 200, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const runTool = async () => ({ id: "1", name: "find_family_flights", text: "x", isError: false, pending: "I am searching. The screen fills in." });
+    const out = await runTurn([], "find flights", { system: "s", tools: [], model: null, onToolStart: () => undefined, runTool });
+    expect(out).toEqual({ text: "I am searching. The screen fills in.", complete: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("the finished answer replaces the stale searching result in the model's history", () => {
+    expect(isPending(searching)).toBe(true);
+    expect(isPending(ready)).toBe(false);
+    const history: Msg[] = [
+      { role: "user", text: "find flights" },
+      { role: "tool", results: [{ id: "1", name: "find_family_flights", text: "I am searching.", isError: false, pending: "I am searching." }] },
+    ];
+    expect(settlePending(history, "find_family_flights", searching)).toBe(false);
+    expect((history[1] as { results: Array<{ text: string }> }).results[0].text).toBe("I am searching.");
+    expect(settlePending(history, "find_family_flights", ready)).toBe(true);
+    expect(settlePending(history, "find_family_flights", ready)).toBe(false);
+    const r = (history[1] as { results: Array<{ text: string; pending?: string }> }).results[0];
+    expect(r.text).toContain("off_1");
+    expect(r.pending).toBeUndefined();
   });
 });

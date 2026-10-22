@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 export interface ToolDef { name: string; description?: string; inputSchema: Record<string, unknown> }
 export interface ToolCall { id: string; name: string; arguments: Record<string, unknown> }
-export interface ToolResult { id: string; name: string; text: string; isError: boolean }
+export interface ToolResult { id: string; name: string; text: string; isError: boolean; /** Set while the tool's work outlives the call (searching, booking): the line Alexa speaks meanwhile. */ pending?: string }
 export type Msg =
   | { role: "user"; text: string }
   | { role: "assistant"; text: string; toolCalls: ToolCall[] }

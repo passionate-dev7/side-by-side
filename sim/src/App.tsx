@@ -4,10 +4,9 @@ import { Handshake, Latency, WireLog } from "./Wire";
 import { sim, type HostMode, type SimState, type Theme } from "./sim";
 
 const PROMPTS = [
-  "We are Dad 40, Mum 38, Mia 6 and Leo 9. Find flights from JFK to MCO on 2026-11-25, kids next to us.",
-  "Show me the seats on the JetBlue flight.",
-  "What about United?",
-  "Book the JetBlue one.",
+  "We are Dad 40, Mum 38, Mia 6 and Leo 9. Find flights from BOS to MCO on 2026-11-25, kids next to us.",
+  "Show me the seats on the best one.",
+  "Book that one.",
   "Are we still sitting together?",
 ];
 

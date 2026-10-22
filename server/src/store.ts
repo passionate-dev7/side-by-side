@@ -60,6 +60,7 @@ export interface Store {
   getPlan(account: string, offerId: string): Plan | null;
   savePlan(account: string, plan: Plan): void;
   saveOrder(account: string, order: BookedOrder): void;
+  /** By the airline's order id or by the booking reference. */
   getOrder(account: string, orderId: string): BookedOrder | null;
   latestOrder(account: string): BookedOrder | null;
 }
@@ -82,7 +83,9 @@ export function openStore(path: string): Store {
     savePlan: (a, p) => void db.prepare("INSERT OR REPLACE INTO plans (account, offer_id, json) VALUES (?, ?, ?)").run(a, p.offerId, JSON.stringify(p)),
     saveOrder: (a, o) =>
       void db.prepare("INSERT OR REPLACE INTO orders (account, order_id, created_at, json) VALUES (?, ?, ?, ?)").run(a, o.orderId, o.createdAt, JSON.stringify(o)),
-    getOrder: (a, id) => one<BookedOrder>("SELECT json FROM orders WHERE account = ? AND order_id = ?", a, id),
+    // A parent says the six-letter booking reference, not the airline's order id: either finds the order.
+    getOrder: (a, id) =>
+      one<BookedOrder>("SELECT json FROM orders WHERE account = ? AND (order_id = ? OR upper(json_extract(json, '$.bookingReference')) = upper(?)) ORDER BY created_at DESC LIMIT 1", a, id, id),
     latestOrder: (a) => one<BookedOrder>("SELECT json FROM orders WHERE account = ? ORDER BY created_at DESC LIMIT 1", a),
   };
 }

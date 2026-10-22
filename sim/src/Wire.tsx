@@ -98,7 +98,7 @@ export function Latency() {
 
 function Row({ r }: { r: LogRow }) {
   const [open, setOpen] = useState(false);
-  const slow = r.source === "mcp" && r.label === "tools/call" && (r.ms ?? 0) > BUDGET_MS;
+  const slow = r.source === "mcp" && r.label === "tools/call" && !r.excluded && (r.ms ?? 0) > BUDGET_MS;
   return (
     <li className={`row ${r.status}`}>
       <button type="button" className="row-main" aria-expanded={open} onClick={() => setOpen((v) => !v)} disabled={!r.detail}>

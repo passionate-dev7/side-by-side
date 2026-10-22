@@ -4,7 +4,7 @@ import { mcpBackend, type Backend } from "./backend";
 import { DEMO, headline, pickOffer, speechMs, TYPE_MS, type OfferRef } from "./demo";
 import { eventLog } from "./log";
 import { connectMcp, resourceUriOf, textOf } from "./mcp";
-import { modelTextOf, runTurn, systemPrompt, toToolDefs, LlmError } from "./orchestrator";
+import { isPending, modelTextOf, runTurn, settlePending, systemPrompt, toToolDefs, LlmError } from "./orchestrator";
 import { listen, recognitionSupported, speak, stopSpeaking, synthesisSupported, type Listener } from "./speech";
 import { ViewHost, type DisplayMode, type HostContext } from "./viewhost";
 
@@ -193,6 +193,7 @@ class Sim {
   private remember(name: string, args: Record<string, unknown>, result: CallToolResult): void {
     const tool = this.backend?.tools.find((t) => t.name === name);
     if (tool && resourceUriOf(tool)) this.last = { tool, args, result };
+    if (settlePending(this.history, name, result) && !this.state.busy && !this.state.demo.running) this.say(headline(textOf(result)));
   }
 
   private lost(reason: string): void {
@@ -332,7 +333,7 @@ class Sim {
 
   private async runTool(call: ToolCall): Promise<ToolResult> {
     const result = await this.execTool(call);
-    return { id: call.id, name: call.name, text: modelTextOf(result), isError: result.isError === true };
+    return { id: call.id, name: call.name, text: modelTextOf(result), isError: result.isError === true, ...(isPending(result) && { pending: textOf(result) }) };
   }
 
   private async execTool(call: ToolCall): Promise<CallToolResult> {

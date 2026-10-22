@@ -89,10 +89,13 @@ function statusTitle(v: StatusView): string {
   return v.seats.some((s) => !s.seat) ? "Seats not assigned yet" : "Your seats changed";
 }
 
+/** The airline has not assigned seats yet and nothing has moved: the family is waiting, not apart. */
+const awaitingSeats = (v: StatusView): boolean => !v.together && !v.affected.length && !v.changes.length && v.seats.some((s) => !s.seat);
+
 function reseatLine(v: StatusView): string {
   const r = v.reseat;
   const who = v.airline.name;
-  if (!r) return `Checked ${checkedAt(v.checkedAt)}${v.refreshing ? ". Checking again." : ""}`;
+  if (!r) return `${awaitingSeats(v) && v.airline.dotFeeFreeAdjacent ? `${who} seats each child beside an adult at no fee. ` : ""}Checked ${checkedAt(v.checkedAt)}${v.refreshing ? ". Checking again." : ""}`;
   if (r.status === "unavailable") return `${r.reason} Ask ${who} to seat ${v.affected.map((a) => a.name).join(" and ")} beside an adult.`;
   const moves = r.moves.map((m) => `${m.name} to ${m.to}`).join(", ");
   return r.guaranteeApplies ? `Proposed: ${moves}. ${who} commits to this at no fee. Ask them to make the change.` : `Proposed: ${moves}${r.fee > 0 ? `, ${money(r.fee, r.currency)} in seat fees` : ", no seat fee"}. Ask ${who} to make the change.`;
@@ -122,7 +125,7 @@ export function statusScreen(v: StatusView): HTMLElement {
     : h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, v.changes.length ? "Seat changes since you booked" : "No seat changes since you booked"));
   return screen(
     "together-status",
-    head(statusTitle(v), [v.together ? chip("ok", "Together", true) : chip("warn", "Not together", true)]),
+    head(statusTitle(v), [v.together ? chip("ok", "Together", true) : awaitingSeats(v) ? chip("accent", "Seats pending", true) : chip("warn", "Not together", true)]),
     h("section", { class: "split" }, left, h("ul", { class: "who", "aria-label": v.changes.length ? "Seats, with changes" : "Seats by traveler" }, ...rows)),
     h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, ...(reseatLine(v).startsWith("Proposed: ") ? [h("b", {}, "Proposed"), reseatLine(v).slice("Proposed".length)] : [reseatLine(v)])), sourceLine(v.provenance)),
   );

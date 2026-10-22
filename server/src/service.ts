@@ -901,7 +901,7 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
   // Confirm the spend.
   const summary = `Book ${family.members.length} seats on ${o.airline.name} ${o.flightNumber ?? ""} ${o.origin} to ${o.destination} for ${money(total, o.currency)}?`;
   if (elicit) {
-    const r = await elicit(summary, { confirm: { type: "boolean", title: "Yes, book it" } }, ["confirm"]);
+    const r = await elicit(summary, { confirm: { type: "boolean", title: "Book these seats now" } }, ["confirm"]);
     if (r.action !== "accept" || r.content?.confirm !== true) throw new ToolError("not_confirmed", "Booking was not confirmed.", "Okay, I have not booked anything.");
   } else if (!input.confirmed) {
     throw new ToolError("confirmation_required", `${summary} Call again with confirmed true to book.`, `${summary} Say yes to book it.`);

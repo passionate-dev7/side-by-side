@@ -10,7 +10,10 @@ const seatFeeList = (o: OfferCard, cur: string) =>
 export function breakdown(o: OfferCard, cur: string, lowestFare = false): string {
   const fare = `${lowestFare ? "Lowest fare" : "Fare"} ${money(o.fare, cur)}`;
   if (o.together !== "TOGETHER") return fare;
-  if (o.waiver.applies) return `${fare} + seats $0${o.waivedFees > 0 ? `, ${money(o.waivedFees, cur)} waived` : ""}`;
+  if (o.waiver.applies) return `${fare} + seats ${money(0, cur)}${o.waivedFees > 0 ? `, ${money(o.waivedFees, cur)} waived` : ""}`;
+  const paid = o.seatLines.filter((l) => l.fee > 0);
+  // Three or more seats at one price read as one phrase; the card has one line for them.
+  if (paid.length > 2 && paid.every((l) => l.fee === paid[0].fee)) return `${fare} + ${paid.length} seats at ${money(paid[0].fee, cur)}`;
   const list = seatFeeList(o, cur);
   return `${fare} + seats ${money(o.seatFees, cur)}${list ? ` (${list})` : ""}`;
 }

@@ -63,7 +63,7 @@ export const register: ToolModule = (server, ctx) => {
     "find_family_flights",
     {
       title: "Find family flights",
-      description: "Search direct one-way flights for the saved family and rank them by the total cost of seating every child beside an adult, seat fees included.",
+      description: "Search direct one-way flights for the family saved on this account, including one saved in an earlier conversation, and rank them by the total cost of seating every child beside an adult, seat fees included. Call it without asking for names or ages again; it says so if no family is saved yet.",
       inputSchema: {
         origin: iata.describe("Departure airport code, for example JFK"),
         destination: iata.describe("Arrival airport code, for example MCO"),
@@ -135,7 +135,7 @@ export const register: ToolModule = (server, ctx) => {
     {
       title: "Still together",
       description: "Check a booked trip: read the current seats and any airline changes, and say whether the family still sits together.",
-      inputSchema: { order_id: z.string().min(1).max(80).optional().describe("Order id, defaults to the latest booking") },
+      inputSchema: { order_id: z.string().min(1).max(80).optional().describe("Order id or booking reference, defaults to the latest booking") },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
       _meta: ui,
     },
