@@ -8,3 +8,5 @@ server/ui-dist
 data
 .progress/
 .taste-skill/
+.DS_Store
+.uicraft-read.json
