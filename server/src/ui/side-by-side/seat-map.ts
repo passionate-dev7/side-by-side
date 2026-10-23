@@ -2,7 +2,8 @@ import type { Cell, FareComparison, NoAdjacentSeats, SeatMapView, Traveler } fro
 import { h, reducedMotion } from "./dom.js";
 import { clock, money, seatLetter } from "./format.js";
 import { sourceLine } from "./provenance.js";
-import { chip, head, screen, type Ctx } from "./screens.js";
+import { whyFree } from "./audit.js";
+import { chip, head, screen, whyList, type Ctx } from "./screens.js";
 
 type SeatCell = Extract<Cell, { kind: "seat" }>;
 
@@ -19,6 +20,8 @@ export class SeatMapScreen {
   private cabinEl: HTMLElement | null = null;
   private tight = false;
   private stopDrag: (() => void) | null = null;
+  /** The "Why $0" list is open in the panel. */
+  private whyOpen = false;
 
   constructor(view: SeatMapView, private readonly ctx: Ctx) {
     this.view = view;
@@ -124,6 +127,17 @@ export class SeatMapScreen {
     const sel = this.selected ? this.traveler(this.selected) : undefined;
     const reasons = [...new Set(v.violations.map((x) => x.reason))];
     if (v.noAdjacent) return this.noAdjacentPanel(v.noAdjacent);
+    const lines = whyFree(v.waiver, v.travelers);
+    const open = this.whyOpen && lines.length > 0;
+    let why: HTMLElement = h("p", { class: "why", title: v.waiver.reason }, h("b", { class: v.waiver.applies ? "yes" : "" }, v.waiver.applies ? "DOT waiver" : "No DOT waiver"), ` ${v.waiver.summary}`);
+    if (lines.length) {
+      why = h("button", { class: "why-btn", type: "button", "aria-expanded": open ? "true" : "false" }, h("b", {}, "DOT waiver"), open ? " Back to fares" : " Why $0");
+      why.addEventListener("click", () => {
+        this.whyOpen = !open;
+        this.paint();
+        this.el.querySelector<HTMLElement>(".why-btn")?.focus();
+      });
+    }
     return h(
       "aside",
       { class: "panel" },
@@ -132,11 +146,15 @@ export class SeatMapScreen {
         { class: "verdict", role: "status" },
         v.together === "TOGETHER" ? chip("ok", "Sitting together", true) : chip("warn", "Not together", true),
         ...reasons.slice(0, 2).map((r) => h("p", { class: "reason" }, r)),
-        h("p", { class: "why", title: v.waiver.reason }, h("b", { class: v.waiver.applies ? "yes" : "" }, v.waiver.applies ? "DOT waiver" : "No DOT waiver"), ` ${v.waiver.summary}`),
+        why,
       ),
-      v.comparison ? this.compare(v.comparison) : null,
-      sel ? h("p", { class: "hint live" }, `Tap a seat for ${sel.name}.`) : v.comparison ? null : h("p", { class: "hint" }, "Drag a name to a seat."),
-      h("div", { class: "legend" }, ...(["adult", "child", "taken"] as const).map((k) => h("span", {}, h("b", { class: `k-${k}`, "aria-hidden": "true" }), k === "adult" ? "Adult" : k === "child" ? "Child" : "Taken"))),
+      ...(open
+        ? [whyList(lines)]
+        : [
+            v.comparison ? this.compare(v.comparison) : null,
+            sel ? h("p", { class: "hint live" }, `Tap a seat for ${sel.name}.`) : v.comparison ? null : h("p", { class: "hint" }, "Drag a name to a seat."),
+            h("div", { class: "legend" }, ...(["adult", "child", "taken"] as const).map((k) => h("span", {}, h("b", { class: `k-${k}`, "aria-hidden": "true" }), k === "adult" ? "Adult" : k === "child" ? "Child" : "Taken"))),
+          ]),
     );
   }
 

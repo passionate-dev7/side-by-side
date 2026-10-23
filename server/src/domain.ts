@@ -216,6 +216,9 @@ export interface BookedView {
   seats: Array<{ name: string; seat: string | null }>;
   /** "seat-services" = seats bought in the order. "airline-guarantee" = no seat fee paid; the carrier seats the family together under the DOT policy. */
   strategy: "seat-services" | "airline-guarantee";
+  /** The DOT finding the booking was priced under. */
+  waiver: DotWaiver;
+  party: Traveler[];
   provenance: Provenance;
   voice: string;
 }

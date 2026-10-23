@@ -708,7 +708,7 @@ async function settleBooking(ctx: Ctx, job: BookingJob, budgetMs = ctx.budgetMs)
  * Places the order and waits for the airline's reference. Runs after the family has said yes, so it re-reads the live seat
  * map once more: seats can be taken between the search and the booking, and a total that moved is never charged.
  */
-async function runBooking(ctx: Ctx, job: BookingJob, family: Family, entry: OfferEntry, plan: Plan, expected: { strategy: BookedView["strategy"]; total: number }): Promise<BookedView> {
+async function runBooking(ctx: Ctx, job: BookingJob, family: Family, entry: OfferEntry, plan: Plan, expected: { strategy: BookedView["strategy"]; total: number; waiver: DotWaiver }): Promise<BookedView> {
   const duffel = duffelOrThrow(ctx);
   const o = entry.summary;
   let orderId = job.orderId;
@@ -815,6 +815,8 @@ async function runBooking(ctx: Ctx, job: BookingJob, family: Family, entry: Offe
     total: booked.total,
     seats,
     strategy: expected.strategy,
+    waiver: expected.waiver,
+    party: family.members.map(toTraveler),
     provenance: provenanceOf(ctx, o.airline.iata, booked.liveMode, true),
     voice: `Booked. Reference ${booked.bookingReference.split("").join(" ")}. ${expected.strategy === "seat-services" ? seatList(seats) + "." : `${o.airline.name} will seat your child beside an adult at no fee.`} Total ${money(booked.total, booked.currency)}.`,
   };
@@ -929,6 +931,8 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
       total,
       seats: planned,
       strategy,
+      waiver,
+      party: family.members.map(toTraveler),
       provenance: provenanceOf(ctx, o.airline.iata, o.liveMode, false),
       voice: `I am booking ${flight} for ${money(total, o.currency)} now. The reference comes back in a few seconds and the screen shows it. Ask me again if you want it read out.`,
     },
@@ -936,7 +940,7 @@ export async function bookTogether(ctx: Ctx, input: { offerId: string; confirmed
     reported: false,
     done: Promise.resolve(),
   };
-  job.done = runBooking(ctx, job, family, entry, plan, { strategy, total }).then(
+  job.done = runBooking(ctx, job, family, entry, plan, { strategy, total, waiver }).then(
     (view) => {
       job.view = view;
       job.status = "confirmed";

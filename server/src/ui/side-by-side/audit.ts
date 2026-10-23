@@ -1,4 +1,4 @@
-import type { OfferCard, OffersView } from "../../domain.js";
+import type { DotWaiver, OfferCard, OffersView, Traveler } from "../../domain.js";
 import { money } from "./format.js";
 
 /** Pure text for the flight card, kept apart from the DOM so the arithmetic on the card can be tested. */
@@ -27,4 +27,20 @@ export function rankNote(o: OfferCard, best: number | null, cur: string): string
 
 export function checkedLabel(v: Pick<OffersView, "evaluated" | "searched" | "moreAvailable">): string {
   return `${v.evaluated} of ${v.searched}${v.moreAvailable ? "+" : ""} fares checked`;
+}
+
+/** The dashboard's conditions in a few words, for the ones this booking meets. */
+const MET: Record<string, string> = {
+  same_reservation: "Everyone on one booking",
+  adjacent_in_class: "Adjacent seats open in cabin",
+  layout_possible: "Each child fits by an adult",
+  seats_untouched: "Airline assigns the seats",
+};
+
+/** Why the seats cost $0: the children the commitment covers, then each DOT condition this booking meets. Empty when the waiver does not apply. */
+export function whyFree(w: DotWaiver, party: Pick<Traveler, "name" | "age">[], childMaxAge = 13): string[] {
+  if (!w.applies) return [];
+  const kids = party.filter((t) => t.age <= childMaxAge);
+  const covered = `${kids.map((k) => `${k.name} ${k.age}`).join(", ")} ${kids.length > 1 ? "are" : "is"} ${childMaxAge} or under`;
+  return [covered, ...w.conditions.filter((c) => c.met === true && MET[c.id]).map((c) => MET[c.id])];
 }

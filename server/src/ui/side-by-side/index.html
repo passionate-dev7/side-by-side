@@ -228,6 +228,18 @@ button:disabled { cursor: not-allowed; }
 .flag-seat { font-size: var(--fs-lead); }
 .flag-seat b { font-weight: 600; color: var(--warn); }
 .ref-line b { color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
+.why-btn { justify-self: start; display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 36px; padding: 0 var(--sp-4); border: 2px solid var(--accent); border-radius: var(--r-2);
+  font-size: var(--fs-note); color: var(--ink); transition: background-color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
+.why-btn b { color: var(--accent); font-weight: 600; }
+.why-btn[aria-expanded="true"] { background: var(--surface-3); }
+.why-btn:active { transform: scale(0.97); }
+.whyfree { list-style: none; padding: 0; display: grid; gap: var(--sp-3); font-size: var(--fs-note); line-height: 1.2; }
+.whyfree li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.whyfree li { position: relative; padding-left: 26px; }
+.whyfree li::before { content: ""; position: absolute; left: 3px; top: 3px; width: 12px; height: 7px; border-left: 3px solid var(--ok); border-bottom: 3px solid var(--ok); transform: rotate(-45deg); }
+.whyfree li:first-child { font-weight: 600; }
+.seated .fee-line { font-size: var(--fs-label); }
+.seated .fee-line b.yes { font-size: var(--fs-lead); }
 .status-map { display: grid; grid-template-columns: 436px minmax(0, 1fr); gap: var(--sp-7); min-height: 0; }
 .status-map .side { display: grid; align-content: center; gap: var(--sp-4); min-width: 0; }
 .status-map .ref { font-size: var(--fs-title); }

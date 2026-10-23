@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { OfferCard } from "../src/domain.js";
-import { breakdown, checkedLabel, rankNote } from "../src/ui/side-by-side/audit.js";
+import { breakdown, checkedLabel, rankNote, whyFree } from "../src/ui/side-by-side/audit.js";
+import { evaluateWaiver } from "../src/waiver.js";
 
 const waiver = (applies: boolean) => ({ applies, code: applies ? "applies" : "carrier_no_commitment", reason: "", summary: "", conditions: [] }) as OfferCard["waiver"];
 const card = (over: Partial<OfferCard>): OfferCard => ({
@@ -30,5 +31,33 @@ describe("flight card arithmetic text", () => {
   it("says how many fares were checked, with a plus when more exist", () => {
     expect(checkedLabel({ evaluated: 10, searched: 23, moreAvailable: false })).toBe("10 of 23 fares checked");
     expect(checkedLabel({ evaluated: 10, searched: 200, moreAvailable: true })).toBe("10 of 200+ fares checked");
+  });
+});
+
+describe("why the seats are $0", () => {
+  const family = [
+    { name: "Dad", age: 40 },
+    { name: "Mum", age: 38 },
+    { name: "Mia", age: 6 },
+    { name: "Leo", age: 9 },
+  ];
+  const input = { ages: family.map((m) => m.age), seatingExists: true, seatsChosenByHand: false, cabinClass: "economy" };
+
+  it("JetBlue lists the children it covers with their ages, then every DOT condition the booking meets", () => {
+    const lines = whyFree(evaluateWaiver({ ...input, iata: "B6", airlineName: "JetBlue" }), family);
+    expect(lines.length).toBeGreaterThanOrEqual(4);
+    expect(lines[0]).toBe("Mia 6, Leo 9 are 13 or under");
+    expect(lines).toContain("Airline assigns the seats");
+  });
+
+  it("Delta, with no commitment, lists nothing", () => {
+    expect(whyFree(evaluateWaiver({ ...input, iata: "DL", airlineName: "Delta" }), family)).toEqual([]);
+  });
+
+  it("a condition that is not met is not listed", () => {
+    const w = evaluateWaiver({ ...input, iata: "B6", airlineName: "JetBlue" });
+    const off = { ...w, conditions: w.conditions.map((c) => (c.id === "same_reservation" ? { ...c, met: false } : c)) };
+    expect(whyFree(w, family)).toContain("Everyone on one booking");
+    expect(whyFree(off, family)).not.toContain("Everyone on one booking");
   });
 });

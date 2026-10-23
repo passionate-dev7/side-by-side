@@ -1,7 +1,7 @@
 import type { BookedView, Cell, ErrorView, FamilyView, OfferCard, OffersView, StatusCabin, StatusView } from "../../domain.js";
 import { h, type Child } from "./dom.js";
 import { checkedAt, clock, day, money, partyLine, seatLetter, stops } from "./format.js";
-import { breakdown, checkedLabel, rankNote } from "./audit.js";
+import { breakdown, checkedLabel, rankNote, whyFree } from "./audit.js";
 import { sourceLine } from "./provenance.js";
 
 export interface Ctx {
@@ -17,6 +17,11 @@ export function screen(kind: string, ...kids: Child[]): HTMLElement {
 export function head(title: string, side: Child[] = [], hero = false, subline?: string): HTMLElement {
   const h1 = h("h1", { class: hero ? "title hero" : "title" }, title);
   return h("header", { class: "head" }, subline ? h("div", { class: "head-main" }, h1, h("p", { class: "subline" }, subline)) : h1, h("div", { class: "head-side" }, ...side));
+}
+
+/** The DOT conditions behind a $0 seat fee, one checked line each. */
+export function whyList(lines: string[]): HTMLElement {
+  return h("ul", { class: "whyfree", "aria-label": "Why the seats are $0" }, ...lines.map((l) => h("li", {}, l)));
 }
 
 export function chip(tone: "ok" | "warn" | "accent" | "muted", text: string, dot = false): HTMLElement {
@@ -72,7 +77,8 @@ export function bookedScreen(v: BookedView): HTMLElement {
         { class: "stack seated", "aria-label": "Travelers" },
         h("div", { class: "chips" }, ...v.seats.map((s) => h("span", { class: "trav" }, h("span", { class: "nm" }, s.name)))),
         h("div", { class: "label" }, "Seat fees"),
-        h("div", { class: "big" }, h("b", { class: "yes" }, "$0"), ` ${v.airline.name} seats the children beside an adult, by the day before the flight.`),
+        h("div", { class: "big fee-line" }, h("b", { class: "yes" }, "$0"), ` ${v.airline.name} seats the children beside an adult, by the day before the flight.`),
+        whyFree(v.waiver, v.party).length ? whyList(whyFree(v.waiver, v.party)) : null,
       )
     : h("ul", { class: "who", "aria-label": "Seats by traveler" }, ...v.seats.map((s) => seatItem(s.name, s.seat)));
   return screen(
