@@ -52,7 +52,8 @@ async function waitFor(url, what, ms = 60_000) {
 }
 
 function start(label, args) {
-  const p = spawn("npm", args, { stdio: ["ignore", "pipe", "pipe"] });
+  // Own process group, so stopping the demo also stops what npm started under it.
+  const p = spawn("npm", args, { stdio: ["ignore", "pipe", "pipe"], detached: true });
   p.stdout.on("data", (d) => process.env.DEMO_VERBOSE && process.stdout.write(`[${label}] ${d}`));
   p.stderr.on("data", (d) => process.env.DEMO_VERBOSE && process.stderr.write(`[${label}] ${d}`));
   p.on("exit", (code) => code && console.error(`${label} exited with ${code}`));
@@ -60,7 +61,13 @@ function start(label, args) {
 }
 
 const stop = () => {
-  for (const k of kids) k.kill("SIGTERM");
+  for (const k of kids) {
+    try {
+      process.kill(-k.pid, "SIGTERM");
+    } catch {
+      k.kill("SIGTERM");
+    }
+  }
   process.exit(0);
 };
 process.on("SIGINT", stop);
