@@ -2,12 +2,37 @@
 // prints the URL that runs the scripted journey, and stops both on Ctrl-C. No credentials are needed.
 //   npm run demo            prints http://127.0.0.1:5173/?autorun=1
 //   npm run demo -- --open  also opens it in the deepsurge browser profile through bhn
-import { spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const SERVER = "http://127.0.0.1:8790/health";
 const CLIENT = "http://127.0.0.1:5173/";
 const URL_RUN = `${CLIENT}?autorun=1`;
+const ROOT = realpathSync(fileURLToPath(new URL("..", import.meta.url)));
 const kids = [];
+
+/** Working directory of the process listening on a port, or null when lsof cannot tell. */
+function listenerDir(port) {
+  try {
+    const pid = execFileSync("lsof", ["-ti", `tcp:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }).trim().split("\n")[0];
+    const line = execFileSync("lsof", ["-a", "-p", pid, "-d", "cwd", "-Fn"], { encoding: "utf8" }).split("\n").find((l) => l.startsWith("n"));
+    return line ? realpathSync(line.slice(1)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A server already answering is reused only when it runs from this checkout, so the demo never shows other code. */
+function reuse(port, what) {
+  const dir = listenerDir(port);
+  if (dir && relative(ROOT, dir).startsWith("..")) {
+    console.error(`Port ${port} already serves ${what} from ${dir}, not from this checkout (${ROOT}). Stop that process and run npm run demo again.`);
+    process.exit(1);
+  }
+  console.log(`Reusing ${what} already running on port ${port}${dir ? ` from ${dir}` : ""}.`);
+}
 
 const up = async (url) => {
   try {
@@ -41,8 +66,10 @@ const stop = () => {
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
 
-if (!(await up(SERVER))) start("server", ["run", "fixture", "-w", "server"]);
-if (!(await up(CLIENT))) start("client", ["run", "dev", "-w", "sim"]);
+if (await up(SERVER)) reuse(8790, "a fixture server");
+else start("server", ["run", "fixture", "-w", "server"]);
+if (await up(CLIENT)) reuse(5173, "an Echo Show client");
+else start("client", ["run", "dev", "-w", "sim"]);
 await waitFor(SERVER, "the fixture server");
 await waitFor(CLIENT, "the Echo Show client");
 
