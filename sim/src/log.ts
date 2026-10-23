@@ -83,7 +83,7 @@ export function latencyOf(rows: readonly LogRow[], match: (r: LogRow) => boolean
 export interface WireStep {
   id: number;
   at: number;
-  method: "initialize" | "notifications/initialized" | "tools/list" | "tools/call";
+  method: "initialize" | "notifications/initialized" | "tools/list" | "prompts/get" | "tools/call";
   /** What the step is about: the negotiated protocol, the tool count, or the tool name. */
   subject: string;
   ms?: number;
@@ -92,7 +92,7 @@ export interface WireStep {
   status: LogStatus;
 }
 
-const STEPS = new Set(["initialize", "notifications/initialized", "tools/list", "tools/call"]);
+const STEPS = new Set(["initialize", "notifications/initialized", "tools/list", "prompts/get", "tools/call"]);
 
 /** The handshake and every tool call, in order, taken from the MCP rows of the event log. */
 export function wireSteps(rows: readonly LogRow[]): WireStep[] {

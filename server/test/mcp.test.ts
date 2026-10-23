@@ -120,6 +120,20 @@ const save = (client: Client) =>
     arguments: { travelers: [{ name: "Dad", age: 40 }, { name: "Mum", age: 38 }, { name: "Mia", age: 6 }, { name: "Leo", age: 9 }] },
   });
 
+describe("the Agent Skill as an MCP prompt", () => {
+  it("prompts/list offers side-by-side with the SKILL.md description, and prompts/get returns the skill's rules", async () => {
+    const client = await connect();
+    const { prompts } = await client.listPrompts();
+    const p = prompts.find((x) => x.name === "side-by-side");
+    expect(p?.description).toMatch(/^Book family flights where every child sits next to a parent\./);
+    const got = await client.getPrompt({ name: "side-by-side" });
+    const text = (got.messages[0].content as { type: "text"; text: string }).text;
+    expect(text).toContain("Nobody under 15 is placed in an exit row");
+    expect(text).not.toMatch(/^---/);
+    await client.close();
+  });
+});
+
 describe("tools through the SDK client", () => {
   it("tools/list exposes the six product tools, each bound to the MCP Apps seat view, with short honest descriptions", async () => {
     const client = await connect();

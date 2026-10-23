@@ -5,9 +5,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { AddressInfo } from "node:net";
 import { createApp } from "../../server/src/app.js";
-import { createCtx } from "../../server/src/service.js";
-import { openStore } from "../../server/src/store.js";
-import { FakeDuffel } from "../../server/test/fixtures/fake-duffel.js";
+import { createFixtureCtx } from "../../server/test/fixtures/fixture-ctx.js";
+import { systemPrompt } from "../src/orchestrator.ts";
 import { selectProvider, type Msg, type ToolResult } from "../server/llm.ts";
 
 const sel = selectProvider({ ...process.env, LLM_PROVIDER: undefined });
@@ -15,7 +14,7 @@ if (!sel.provider) throw new Error(sel.error);
 const provider = sel.provider;
 if (provider.id !== "bedrock-mantle") throw new Error(`default provider is ${provider.id}, expected bedrock-mantle`);
 
-const ctx = createCtx({ duffel: new FakeDuffel(), store: openStore(":memory:"), poll: { attempts: 5, delayMs: 300 } });
+const { ctx } = createFixtureCtx();
 const { app } = createApp(ctx, { log: false, allowedOrigins: [] });
 const server = app.listen(0, "127.0.0.1");
 await new Promise((r) => server.once("listening", r));
@@ -27,7 +26,10 @@ const visible = (await client.listTools()).tools.filter((t) => {
   return !Array.isArray(vis) || vis.includes("model");
 });
 const tools = visible.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema as Record<string, unknown> }));
-const system = "You are Alexa+ on an Echo Show. Call a tool for anything about flights or the family. Never guess. Speak in short plain sentences, no markdown. Today is 2026-10-21.";
+// The system prompt the simulator sends: the Echo Show persona plus the Agent Skill the server serves as prompt "side-by-side".
+const skill = (await client.getPrompt({ name: "side-by-side" })).messages.map((m) => (m.content.type === "text" ? m.content.text : "")).join("\n");
+if (!skill.includes("exit row")) throw new Error("FAIL: the server did not serve the side-by-side skill");
+const system = systemPrompt("Friday, October 23, 2026", skill);
 const history: Msg[] = [{ role: "user", text: "We are the Lopez family: me Maria 38, my husband Diego 41, and our kids Sofia who is 6 and Mateo who is 4. Save us, then find our flights from JFK to MCO on 2026-12-15." }];
 
 const called: string[] = [];

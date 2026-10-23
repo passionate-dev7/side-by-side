@@ -19,7 +19,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-const STEP_LABEL = { initialize: "initialize", "notifications/initialized": "initialized", "tools/list": "tools/list", "tools/call": "tools/call" } as const;
+const STEP_LABEL = { initialize: "initialize", "notifications/initialized": "initialized", "tools/list": "tools/list", "prompts/get": "prompts/get", "tools/call": "tools/call" } as const;
 
 function Steps() {
   const rows = useLog();

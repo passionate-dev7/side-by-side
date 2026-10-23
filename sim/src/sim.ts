@@ -91,6 +91,8 @@ class Sim {
   private state: SimState;
   private listeners = new Set<Listen>();
   private backend: Backend | null = null;
+  /** The server's Agent Skill, loaded at connect. */
+  private skill: string | null = null;
   private host: ViewHost | null = null;
   private slot: HTMLElement | null = null;
   private history: Msg[] = [];
@@ -176,6 +178,7 @@ class Sim {
         onClosed: (reason) => this.lost(reason),
       });
       this.backend = mcpBackend(conn);
+      this.skill = conn.skill;
       this.set({
         conn: { status: "connected", protocolVersion: conn.protocolVersion, serverName: conn.serverName, serverVersion: conn.serverVersion, sessionId: conn.sessionId, toolCount: conn.tools.length },
       });
@@ -287,7 +290,7 @@ class Sim {
     this.set({ busy: true, caption: null, heard: "" });
     try {
       const outcome = await runTurn(this.history, q, {
-        system: systemPrompt(new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })),
+        system: systemPrompt(new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }), this.skill),
         tools: toToolDefs(backend.tools),
         model: this.state.llm.model ?? null,
         onToolStart: () => undefined,
@@ -323,6 +326,7 @@ class Sim {
     try {
       const conn = await connectMcp(this.state.url.trim(), { onElicit: (p) => this.askUser(p), onToolResult: (n, a, r) => this.remember(n, a, r), onClosed: (r) => this.lost(r) });
       this.backend = mcpBackend(conn);
+      this.skill = conn.skill;
       this.set({ conn: { status: "connected", protocolVersion: conn.protocolVersion, serverName: conn.serverName, serverVersion: conn.serverVersion, sessionId: conn.sessionId, toolCount: conn.tools.length } });
       return this.backend;
     } catch (e) {

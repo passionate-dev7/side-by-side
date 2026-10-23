@@ -105,6 +105,7 @@ class WireTransport extends StreamableHTTPClientTransport {
       const note =
         f.method === "initialize" && typeof result?.protocolVersion === "string" ? `protocol ${result.protocolVersion}`
         : f.method === "tools/list" && Array.isArray(result?.tools) ? `${result.tools.length} tools: ${(result.tools as Array<{ name: string }>).map((t) => t.name).join(", ")}`
+        : f.method === "prompts/get" && Array.isArray(result?.messages) ? `Agent Skill loaded as the system prompt`
         : undefined;
       eventLog.update(f.row, {
         status: err || toolFailed ? "error" : "ok",
@@ -137,8 +138,12 @@ export interface McpConnection {
   serverVersion: string;
   sessionId: string | null;
   tools: Tool[];
+  /** The server's Agent Skill (prompt "side-by-side"), loaded at connect; null when the server serves none. */
+  skill: string | null;
   close(): Promise<void>;
 }
+
+export const SKILL_PROMPT = "side-by-side";
 
 export async function connectMcp(url: string, handlers: McpHandlers): Promise<McpConnection> {
   let endpoint: URL;
@@ -166,6 +171,14 @@ export async function connectMcp(url: string, handlers: McpHandlers): Promise<Mc
       tools.push(...page.tools);
       cursor = page.nextCursor;
     } while (cursor);
+    let skill: string | null = null;
+    if (client.getServerCapabilities()?.prompts) {
+      const { prompts } = await client.listPrompts();
+      if (prompts.some((p) => p.name === SKILL_PROMPT)) {
+        const got = await client.getPrompt({ name: SKILL_PROMPT });
+        skill = got.messages.map((m) => (m.content.type === "text" ? m.content.text : "")).join("\n").trim() || null;
+      }
+    }
     const info = client.getServerVersion();
     return {
       client,
@@ -174,6 +187,7 @@ export async function connectMcp(url: string, handlers: McpHandlers): Promise<Mc
       serverVersion: info?.version ?? "",
       sessionId: transport.sessionId ?? null,
       tools,
+      skill,
       close: () => client.close(),
     };
   } catch (e) {
