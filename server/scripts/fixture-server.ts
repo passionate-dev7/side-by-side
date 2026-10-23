@@ -11,4 +11,4 @@ const wait = Number(process.env.FIXTURE_DELAY_MS ?? 0);
 if (wait > 0) fake.delay = { search: wait, order: wait, seatMaps: () => wait };
 const { app } = createApp(ctx, { log: true, allowedOrigins: (process.env.ALLOWED_ORIGINS ?? "").split(",").filter(Boolean) });
 mountFixtureRoutes(app, ctx, fake);
-app.listen(port, "127.0.0.1", () => console.log(`FIXTURE MCP server on http://127.0.0.1:${port}/mcp (fake Duffel, in-memory state, offers JetBlue/Delta/United/Spirit; airline control at /fixture)`));
+app.listen(port, "127.0.0.1", () => console.log(`FIXTURE MCP server on http://127.0.0.1:${port}/mcp (Duffel emulator, in-memory state, offers JetBlue/Delta/United/Spirit; airline control at /fixture)`));

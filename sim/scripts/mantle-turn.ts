@@ -1,5 +1,5 @@
 // Proof of one full model turn on the Bedrock mantle provider: the model must call save_family, then find_family_flights,
-// against the real MCP tools served by the fixture server (strict fake Duffel). Run: npx tsx sim/scripts/mantle-turn.ts
+// against the real MCP tools served by the fixture server (Duffel emulator). Run: npx tsx sim/scripts/mantle-turn.ts
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -26,7 +26,7 @@ const visible = (await client.listTools()).tools.filter((t) => {
   return !Array.isArray(vis) || vis.includes("model");
 });
 const tools = visible.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema as Record<string, unknown> }));
-// The system prompt the simulator sends: the Echo Show persona plus the Agent Skill the server serves as prompt "side-by-side".
+// The system prompt the Echo Show client sends: the Echo Show persona plus the Agent Skill the server serves as prompt "side-by-side".
 const skill = (await client.getPrompt({ name: "side-by-side" })).messages.map((m) => (m.content.type === "text" ? m.content.text : "")).join("\n");
 if (!skill.includes("exit row")) throw new Error("FAIL: the server did not serve the side-by-side skill");
 const system = systemPrompt("Friday, October 23, 2026", skill);

@@ -1,6 +1,6 @@
 # DESIGN.md: Side by Side
 
-Hallmark catalog theme: **Midnight** (atmospheric cluster: cool dark canvas, hue 250, Geist display and body, hairline structure, fade-only motion). Genre: atmospheric. Component scope: device screens (768x480 MCP Apps view) plus the web simulator that hosts them.
+Hallmark catalog theme: **Midnight** (atmospheric cluster: cool dark canvas, hue 250, Geist display and body, hairline structure, fade-only motion). Genre: atmospheric. Component scope: device screens (768x480 MCP Apps view) plus Side by Side on Echo Show, the client that hosts them.
 
 Extended, not invented. The device canvas is fixed by Amazon's published Alexa visual foundations (768x480 base canvas, Echo Show 8/15 root scale 1.667, dark card #14181E, light card #FFFFFF, type tokens 48/40/32/28/24/20/18/16/14/12/10/8 px, spacing 2/6/8/12/16/20/24, radii 4/8/12/16, both themes, legible at 3 ft). Midnight supplies the hue family, the neutral ramp, the accent discipline and the motion language. The two Amazon card surfaces are vendor-fixed and enter the token set unchanged.
 
@@ -51,7 +51,7 @@ Geist variable (SIL OFL), embedded in the view as a data URI so the sandboxed if
 
 Device scale (px on the 768x480 canvas): 48 booking reference and hero verdict, 32 screen title and price totals, 28 airline name, 24 body and name chips, 20 secondary labels and seat designators, 18 and below only for map annotations (row numbers, fee on a seat). Minimum for any decision-bearing text is 24.
 
-Simulator chrome (outside the device) uses Geist at 14 to 20 and Geist Mono for protocol text.
+Client chrome (outside the device) uses Geist at 14 to 20 and Geist Mono for protocol text.
 
 ## Spacing and radius
 

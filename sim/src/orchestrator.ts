@@ -69,7 +69,7 @@ async function complete(system: string, messages: Msg[], tools: ToolDef[], model
   try {
     res = await fetch("/api/llm", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ system, messages, tools }) });
   } catch (e) {
-    const msg = `Could not reach the simulator's LLM proxy: ${e instanceof Error ? e.message : String(e)}`;
+    const msg = `Could not reach the Echo Show client's LLM proxy: ${e instanceof Error ? e.message : String(e)}`;
     eventLog.update(row, { status: "error", ms: Math.round(performance.now() - t0), detail: msg });
     throw new LlmError(msg);
   }

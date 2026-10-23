@@ -7,7 +7,7 @@ export interface ResourceHtml {
   prefersBorder: boolean;
 }
 
-/** What the simulator needs from a tool provider. The real implementation is the MCP client. */
+/** What the Echo Show client needs from a tool provider. The real implementation is the MCP client. */
 export interface Backend {
   readonly kind: "mcp" | "dev";
   /** Passed to AppBridge so the view's tools/call and resources/read are forwarded to the server. */

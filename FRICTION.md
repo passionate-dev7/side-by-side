@@ -1,6 +1,6 @@
 # Friction log: Side by Side (Alexa+ track, AWS Builder mini challenge)
 
-Eight entries from building an Alexa+ MCP add-on, a client for it, and an Amazon Bedrock tool-calling loop between 2026-10-20 and 2026-10-21. Every entry happened in this repo's history; each names where it is recorded.
+Eight entries from building an Alexa+ MCP add-on, a client for it, and an Amazon Bedrock tool-calling loop between 2026-10-20 and 2026-10-21. Every entry happened while building this repo; each names its source.
 
 ## 1. Alexa+ developer tooling cannot be reached by hackathon participants
 
@@ -11,7 +11,7 @@ Eight entries from building an Alexa+ MCP add-on, a client for it, and an Amazon
 - Severity: High. The track asks for an Alexa+ integration and withholds the only harness that exercises one.
 - Workaround: built a client that behaves as the docs describe (MCP client, MCP Apps AppBridge, 768x480 canvas, elicitation forms, voice, an LLM tool-choosing loop) in `sim/`, and a wire panel that prints the MCP handshake and the latency of every call against the 500 ms budget.
 - Suggestion: ship the Local Inspector (`addon-local-inspector`, the thing that writes `certification-verdict.json`) as a public npm package, with no allowlist. It needs no Alexa account to be useful.
-- Source: `docs/research/platform.md` section 3.
+- Source: the hackathon FAQ (https://amazonappdev2026.devpost.com/details/faqs) and the CLI setup page (https://developer.amazon.com/docs/alexaplus/add-ons/set-up-your-development-environment.html).
 
 ## 2. The docs and the real `initialize` disagree on the MCP protocol version
 
@@ -22,7 +22,7 @@ Eight entries from building an Alexa+ MCP add-on, a client for it, and an Amazon
 - Severity: Medium. A server that answers only 2025-11-25 to that request can be rejected by the spec's own version negotiation.
 - Workaround: the server accepts both and echoes the client's version when it supports it. `server/test/mcp.test.ts` runs `initialize` with each and asserts the echo, then asserts a client that asks for an unknown version gets 2025-11-25.
 - Suggestion: state in one sentence which version Alexa+ sends today and which it will send after the planned upgrade, so authors do not have to infer it from a payload example.
-- Source: `docs/research/platform.md` conflict 7.1; `server/test/mcp.test.ts`.
+- Source: https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-overview.html and https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-client-lifecycle.html; `server/test/mcp.test.ts`.
 
 ## 3. Session semantics are not MCP sessions
 
@@ -33,18 +33,18 @@ Eight entries from building an Alexa+ MCP add-on, a client for it, and an Amazon
 - Severity: Medium.
 - Workaround: `save_family` writes the family to the server's own store and every other tool reads it from there. The server also serves a request that has no session and no `initialize` (`serves a request with no session and no initialize (Alexa+ style) statelessly` in `server/test/mcp.test.ts`).
 - Suggestion: document the identity a server can rely on across turns (a stable user or household id in `_meta`), because "state across sessions" is a stated judging item and there is no named key to hang it on.
-- Source: `docs/research/platform.md` section 3; `server/test/mcp.test.ts`.
+- Source: https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-client-lifecycle.html (session handling); `server/test/mcp.test.ts`.
 
 ## 4. Anthropic models are refused for the account on Bedrock
 
-- Task: use a Claude model on Bedrock as the tool-choosing model in the Echo Show client (Converse API, default id `us.anthropic.claude-haiku-4-5-20251001-v1:0`), and in a sibling entry as a judge (`anthropic.claude-3-haiku-20240307-v1:0`).
+- Task: use a Claude model on Bedrock as the tool-choosing model in the Echo Show client (Converse API, default id `us.anthropic.claude-haiku-4-5-20251001-v1:0`), and the smaller `anthropic.claude-3-haiku-20240307-v1:0`.
 - Steps: call Converse from `@aws-sdk/client-bedrock-runtime` in `us-east-1` with the account's credentials.
 - Expected: the Anthropic model answers.
-- Actual: every Anthropic model id we tried was refused for the account. The sibling entry's probe through the real SDK returned `ResourceNotFoundException`, and the Ring entry's ledger records the same refusal of Anthropic models for these credentials.
+- Actual: every Anthropic model id we tried was refused for the account. The Converse call through the real SDK returned `ResourceNotFoundException`.
 - Severity: High for an AWS Builder entry. The most common Bedrock model family is the one that is unavailable, and the error does not say how to enable it.
 - Workaround: switched the default to the mantle endpoint with `openai.gpt-oss-120b` (entry 6). The Converse provider stays in `sim/server/llm.ts` for accounts that have an Anthropic model.
 - Suggestion: have the error name the missing step (model access request, use-case form, or regional availability) and link to it, and add a `list-usable-models` call that returns only what the calling identity can invoke.
-- Source: `ring/.progress/LEDGER.md` (Bedrock section) and `bee/.progress/LEDGER.md` (judge probe), same account.
+- Source: Converse calls through `@aws-sdk/client-bedrock-runtime` on the team's account, 2026-10-20 to 2026-10-21. The provider is `bedrock` in `sim/server/llm.ts`; the working path is `sim/scripts/mantle-turn.ts`.
 
 ## 5. Nova returns "Operation not allowed" on bedrock-runtime while the mantle endpoint works
 
@@ -55,7 +55,7 @@ Eight entries from building an Alexa+ MCP add-on, a client for it, and an Amazon
 - Severity: High. Two endpoints on one service accept one credential differently, and the 400 message does not say which side of the difference the caller is on.
 - Workaround: all live Bedrock calls go through mantle. `sim/scripts/mantle-turn.ts` is the runnable proof.
 - Suggestion: say in the error which entitlement is missing, and publish a table of which model ids are served on bedrock-runtime and which on bedrock-mantle.
-- Source: `ring/.progress/LEDGER.md` ("Nova on bedrock-runtime Converse returns 400 Operation not allowed").
+- Source: Converse calls on the team's account, 2026-10-20 to 2026-10-21; the mantle path that works is `bedrockMantle` in `sim/server/llm.ts`, run by `sim/scripts/mantle-turn.ts`.
 
 ## 6. gpt-oss-120b writes markdown into a voice reply after being told not to
 
@@ -64,9 +64,9 @@ Eight entries from building an Alexa+ MCP add-on, a client for it, and an Amazon
 - Expected: plain sentences.
 - Actual: the final reply of the full turn contains bold markers and a per-offer list (`**JetBlue (offer off_jetblue)** - total $812.`), which a speech engine reads aloud as symbols.
 - Severity: Medium for voice products.
-- Workaround: strip markdown in code before any reply is captioned, spoken or stored in history (`sim/src/speakable.ts`, 14 tests in `sim/test/speakable.test.ts`). Tool selection is unaffected: the same run called `save_family` then `find_family_flights` with valid arguments.
+- Workaround: strip markdown in code before any reply is captioned, spoken or stored in history (`sim/src/speakable.ts`, 16 tests in `sim/test/speakable.test.ts`). Tool selection is unaffected: the same run called `save_family` then `find_family_flights` with valid arguments.
 - Suggestion: document a response-format switch for chat completions on mantle that forbids markdown, or a documented prompt pattern that holds for this model.
-- Source: commit `2aa1c63`; `sim/scripts/mantle-turn.ts` output.
+- Source: commit `bd14209`; `sim/scripts/mantle-turn.ts` output.
 
 ## 7. "Agent Skill" means three different things in the track material
 
@@ -77,7 +77,7 @@ Eight entries from building an Alexa+ MCP add-on, a client for it, and an Amazon
 - Severity: Low to Medium. The choice changes what a judge looks for.
 - Workaround: ship both: the MCP server and `skills/side-by-side/SKILL.md`, whose frontmatter, rules and tool routing match the server's six tools.
 - Suggestion: one sentence on the track page naming the artifact a submission must contain.
-- Source: `docs/research/platform.md` conflict 7.1 list, item 1.
+- Source: the hackathon Resources page (https://amazonappdev2026.devpost.com/resources, Alexa+ section) and https://developer.amazon.com/docs/alexaplus/add-ons/set-up-your-development-environment.html (the Add-on Agent Skill); `skills/side-by-side/SKILL.md`, `server/test/mcp.test.ts` (prompts/get), `sim/test/client-skill.test.ts`.
 
 ## 8. The Duffel SDK exposes seat maps by offer id only
 
@@ -88,4 +88,4 @@ Eight entries from building an Alexa+ MCP add-on, a client for it, and an Amazon
 - Severity: Medium for any product that manages seats after purchase.
 - Workaround: `still_together` computes the proposal from the booked offer's seat map and, when it does not answer, names the traveler and the seats to ask the airline for (`server/src/service.ts`, covered by `server/test/e2e.test.ts`).
 - Suggestion: a seat map endpoint keyed by order id, and a way to add a seat service to a paid order.
-- Source: `alexa/.progress/LEDGER.md` data truth section.
+- Source: `@duffel/api` 4.31 (`duffel.seatMaps.get({ offer_id })`, called in `server/src/duffel.ts`); `server/test/e2e.test.ts`.

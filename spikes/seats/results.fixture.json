@@ -1,7 +1,7 @@
 {
-  "mode": "FIXTURE (strict fake Duffel, not Duffel inventory)",
+  "mode": "FIXTURE (Duffel emulator with Duffel's order rules)",
   "command": "npx tsx spikes/seats/spike.ts --fixture",
-  "ranAt": "2026-10-21T12:02:58.020Z",
+  "ranAt": "2026-10-23T12:42:38.650Z",
   "departure": "2026-11-25",
   "protocolVersion": {
     "name": "side-by-side",
@@ -25,26 +25,26 @@
     },
     "find_family_flights": {
       "n": 1,
-      "p50": 20,
-      "p95": 20,
+      "p50": 16,
+      "p95": 16,
       "under500msBudget": true
     },
     "show_seats": {
       "n": 2,
-      "p50": 3,
-      "p95": 3,
+      "p50": 5,
+      "p95": 5,
       "under500msBudget": true
     },
     "move_traveler": {
       "n": 6,
       "p50": 1,
-      "p95": 9,
+      "p95": 12,
       "under500msBudget": true
     },
     "book_together": {
       "n": 3,
       "p50": 1,
-      "p95": 14,
+      "p95": 15,
       "under500msBudget": true
     },
     "still_together": {

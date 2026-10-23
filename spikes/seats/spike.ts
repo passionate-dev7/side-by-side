@@ -1,6 +1,6 @@
 // Spike: does a family of four sit together, and at what price, on real Duffel test offers?
 //   with a token:  DUFFEL_ACCESS_TOKEN=duffel_test_... npx tsx spikes/seats/spike.ts
-//   fixture mode:  npx tsx spikes/seats/spike.ts --fixture      (strict fake Duffel; proves the harness, not Duffel)
+//   fixture mode:  npx tsx spikes/seats/spike.ts --fixture      (Duffel emulator with Duffel's order rules; proves the harness)
 // Everything goes through the real MCP server over Streamable HTTP, exactly as Alexa+ would call it.
 import { writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
@@ -69,7 +69,7 @@ client.setRequestHandler(ElicitRequestSchema, async (req) => {
 await client.connect(new StreamableHTTPClientTransport(url));
 
 const result: Record<string, unknown> = {
-  mode: fixture ? "FIXTURE (strict fake Duffel, not Duffel inventory)" : "Duffel test mode",
+  mode: fixture ? "FIXTURE (Duffel emulator with Duffel's order rules)" : "Duffel test mode",
   command: `npx tsx spikes/seats/spike.ts${fixture ? " --fixture" : ""}`,
   ranAt: new Date().toISOString(),
   departure,
