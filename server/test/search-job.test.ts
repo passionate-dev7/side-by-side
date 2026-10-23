@@ -34,16 +34,15 @@ beforeEach(() => setup());
 describe("find_family_flights answers within the budget and finishes in the background", () => {
   it("slow seat maps: the first answer says it is still reading, a repeat joins the same search and returns the finished ranking", async () => {
     setup(SCENARIOS, { budgetMs: 15 });
-    fake.delay.seatMaps = () => 200;
-    const t0 = performance.now();
+    const release = fake.hold("seatMaps");
     const first = await findFamilyFlights(ctx, SEARCH);
-    expect(performance.now() - t0).toBeLessThan(150);
     expect(first).toMatchObject({ status: "searching", offers: [], evaluated: 0, searched: 4, checking: { done: 0, of: 4 } });
     expect(first.voice).toMatch(/I found 4 direct fares and I am reading seat maps on the 4 cheapest/);
     expect(first.query).toEqual({ origin: "JFK", destination: "MCO", departure_date: "2026-11-25", cabin: "economy" });
 
     const again = await findFamilyFlights(ctx, SEARCH);
     expect(fake.calls.filter((c) => c === "searchOffers")).toHaveLength(1);
+    release();
     await jobOf().done;
     const done = await findFamilyFlights(ctx, SEARCH);
     expect(done).toMatchObject({ status: "ready", evaluated: 4, checking: { done: 4, of: 4 } });
@@ -53,14 +52,17 @@ describe("find_family_flights answers within the budget and finishes in the back
   });
 
   it("partial answer: the offers that have priced are ranked and spoken, 'so far', before the rest land", async () => {
-    setup(SCENARIOS, { budgetMs: 80 });
-    fake.delay.seatMaps = (id) => (id === "off_jetblue" ? 5 : 500);
+    // JetBlue answers at once; the other three airlines hold until released. The budget is generous so JetBlue lands
+    // inside it on any machine.
+    setup(SCENARIOS, { budgetMs: 300 });
+    const releases = SCENARIOS.filter((sc) => sc.id !== "off_jetblue").map((sc) => fake.hold(`seatMaps:${sc.id}`));
     const v = await findFamilyFlights(ctx, SEARCH);
     expect(v.status).toBe("searching");
     expect(v.offers.map((o) => o.airline.iata)).toEqual(["B6"]);
     expect(v.evaluated).toBe(1);
     expect(v.voice).toMatch(/^So far, JetBlue is the best way to sit together: \$812 total/);
     expect(v.voice).toMatch(/still reading seat maps, 1 of 4 done/);
+    releases.forEach((r) => r());
     await jobOf().done;
     expect((await findFamilyFlights(ctx, SEARCH)).offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "NK", "UA"]);
   });
@@ -84,8 +86,9 @@ describe("find_family_flights answers within the budget and finishes in the back
   it("a failure that lands after the budget is raised by the next call", async () => {
     setup(SCENARIOS, { budgetMs: 5 });
     SCENARIOS.forEach((s) => fake.noSeatMap.add(s.id));
-    fake.delay.seatMaps = () => 30;
+    const release = fake.hold("seatMaps");
     expect((await findFamilyFlights(ctx, SEARCH)).status).toBe("searching");
+    release();
     await jobOf().done;
     await expect(findFamilyFlights(ctx, SEARCH)).rejects.toMatchObject({ code: "no_seat_maps" });
     expect(ctx.searches.size).toBe(0);

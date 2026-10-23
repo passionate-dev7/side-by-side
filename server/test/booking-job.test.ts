@@ -24,9 +24,16 @@ const noAsking: Elicit = async () => {
   throw new Error("a repeat must not ask the family again");
 };
 
+/** The airline holds every call of this kind until released, and tools answer after a short budget. */
+function slowAirline(kind: string): () => void {
+  ctx.budgetMs = 15;
+  return fake.hold(kind);
+}
+
 beforeEach(async () => {
   fake = new FakeDuffel();
-  ctx = createCtx({ duffel: fake, store: openStore(":memory:"), now: () => NOW, poll: { attempts: 3, delayMs: 1 }, budgetMs: 15 });
+  // A generous budget, so work the airline answers at once settles inside it on any machine.
+  ctx = createCtx({ duffel: fake, store: openStore(":memory:"), now: () => NOW, poll: { attempts: 3, delayMs: 1 }, budgetMs: 2000 });
   saveFamily(ctx, FAMILY);
   await findFamilyFlights(ctx, SEARCH);
   await showSeats(ctx, "off_delta");
@@ -36,10 +43,8 @@ const job = (offerId = "off_delta") => ctx.bookings.get(offerId)!;
 
 describe("book_together answers with the booking state and finishes the order in the background", () => {
   it("a slow airline: the call returns the booking within the budget, the repeat returns the reference, and one order is placed", async () => {
-    fake.delay.order = 80;
-    const t0 = performance.now();
+    const release = slowAirline("order");
     const first = await bookTogether(ctx, { offerId: "off_delta", confirmed: true }, null);
-    expect(performance.now() - t0).toBeLessThan(70);
     expect(first).toMatchObject({ kind: "booked", status: "booking", orderId: null, bookingReference: null, strategy: "seat-services", total: 850, offerId: "off_delta" });
     expect(first.seats.every((s) => s.seat)).toBe(true);
     expect(first.voice).toMatch(/^I am booking Delta DL1187 for \$850 now/);
@@ -48,6 +53,7 @@ describe("book_together answers with the booking state and finishes the order in
     const during = await bookTogether(ctx, { offerId: "off_delta", confirmed: false }, noAsking);
     expect(during.status).toBe("booking");
 
+    release();
     await job().done;
     const after = await bookTogether(ctx, { offerId: "off_delta", confirmed: false }, noAsking);
     expect(after).toMatchObject({ status: "confirmed", bookingReference: "FXT4KQ", total: 850 });
@@ -65,13 +71,14 @@ describe("book_together answers with the booking state and finishes the order in
     saveFamily(ctx, FAMILY);
     expect(ctx.bookings.size).toBe(0);
     expect(ctx.searches.size).toBe(0);
-    fake.delay.order = 80;
     await findFamilyFlights(ctx, SEARCH);
     await showSeats(ctx, "off_jetblue");
+    const release = slowAirline("order");
     await bookTogether(ctx, { offerId: "off_jetblue", confirmed: true }, null);
     expect(job("off_jetblue").status).toBe("booking");
     saveFamily(ctx, FAMILY);
     expect(ctx.bookings.size).toBe(1);
+    release();
     await job("off_jetblue").done;
   });
 
@@ -81,12 +88,13 @@ describe("book_together answers with the booking state and finishes the order in
   });
 
   it("a seat sold after the family said yes fails the booking in the background; it is reported once and no order exists", async () => {
-    fake.delay.seatMaps = () => 40;
+    const release = slowAirline("seatMaps");
     const first = await bookTogether(ctx, { offerId: "off_delta", confirmed: true }, null);
     expect(first.status).toBe("booking");
     const seat = ctx.store.getPlan("default", "off_delta")!.assignments.mia;
     for (const cabin of fake.offers.get("off_delta")!.map.cabins)
       for (const r of cabin.rows) for (const s of r.sections) for (const el of s.elements) if (el.type === "seat" && el.designator === seat) el.available_services = [];
+    release();
     await job().done;
     await expect(bookTogether(ctx, { offerId: "off_delta", confirmed: false }, null)).rejects.toMatchObject({ code: "no_adjacent_seats" });
     expect(fake.orders.size).toBe(0);
@@ -94,12 +102,13 @@ describe("book_together answers with the booking state and finishes the order in
   });
 
   it("a total that moved after the family agreed is never charged", async () => {
-    fake.delay.seatMaps = () => 40;
+    const release = slowAirline("seatMaps");
     const first = await bookTogether(ctx, { offerId: "off_delta", confirmed: true }, null);
     expect(first).toMatchObject({ status: "booking", total: 850 });
     const seats = Object.values(ctx.store.getPlan("default", "off_delta")!.assignments);
     for (const cabin of fake.offers.get("off_delta")!.map.cabins)
       for (const r of cabin.rows) for (const s of r.sections) for (const el of s.elements) if (el.type === "seat" && seats.includes(el.designator)) for (const svc of el.available_services) svc.total_amount = "60.00";
+    release();
     await job().done;
     const err = await bookTogether(ctx, { offerId: "off_delta", confirmed: false }, null).catch((e) => e);
     expect(err).toMatchObject({ code: "price_changed" });
@@ -142,14 +151,13 @@ describe("still_together serves the last reading while a fresh one is read", () 
     ctx.now = () => new Date(NOW.getTime() + 4000);
     const mia = ctx.store.getOrder("default", b.orderId!)!.passengerIds.mia;
     fake.airlineMovesSeat(b.orderId!, mia, "30F");
-    fake.delay.order = 60;
-    const t0 = performance.now();
+    const release = slowAirline("order");
     const stale = (await checkTrip(ctx)) as StatusView;
-    expect(performance.now() - t0).toBeLessThan(55);
     expect(stale).toMatchObject({ kind: "together-status", refreshing: true, together: true });
     expect(stale.voice).toMatch(/^As of \d+ seconds ago: Yes\./);
     expect(stale.voice).toMatch(/I am checking again\.$/);
 
+    release();
     await ctx.refreshing.get(b.orderId!);
     const fresh = (await checkTrip(ctx)) as StatusView;
     expect(fresh).toMatchObject({ refreshing: false, together: false });
@@ -168,10 +176,11 @@ describe("still_together serves the last reading while a fresh one is read", () 
 
   it("no earlier reading: the answer is what the booking says, marked as refreshing, and the reading still lands", async () => {
     const b = await bookTogether(ctx, { offerId: "off_delta", confirmed: true }, null);
-    fake.delay.order = 60;
+    const release = slowAirline("order");
     const v = (await checkTrip(ctx)) as StatusView;
     expect(v).toMatchObject({ refreshing: true, together: true, bookingReference: "FXT4KQ" });
     expect(v.voice).toMatch(/^You booked Dad \S+, Mum \S+, Mia \S+, Leo \S+\. I am checking with Delta/);
+    release();
     await ctx.refreshing.get(b.orderId!);
     expect(((await checkTrip(ctx)) as StatusView).refreshing).toBe(false);
   });
@@ -189,11 +198,12 @@ describe("still_together serves the last reading while a fresh one is read", () 
   });
 
   it("while the booking is still being placed and no order is stored, the answer is the booking state", async () => {
-    fake.delay.order = 80;
+    const release = slowAirline("order");
     await bookTogether(ctx, { offerId: "off_delta", confirmed: true }, null);
     const v = await checkTrip(ctx);
     expect(v).toMatchObject({ kind: "booked", status: "booking" });
     await expect(checkTrip(ctx, "ord_other")).rejects.toMatchObject({ code: "no_booking" });
+    release();
     await job().done;
     expect((await checkTrip(ctx)).kind).toBe("together-status");
   });

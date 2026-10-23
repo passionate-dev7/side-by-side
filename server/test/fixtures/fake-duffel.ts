@@ -121,6 +121,19 @@ export class FakeDuffel implements DuffelPort {
   expiresAt: string | null = null;
   /** Network time the emulator takes per call, so latency-sensitive behavior can be tested. Zero by default. */
   delay = { search: 0, order: 0, seatMaps: (_offerId: string): number => 0 };
+  private readonly holds = new Map<string, Promise<void>>();
+  /**
+   * Calls of this kind wait until the returned function is called: an airline that stays slow however loaded the
+   * machine is. Kinds: "order" (createOrder and getOrder), "seatMaps" (every seat map), "seatMaps:<offerId>" (one).
+   */
+  hold(kind: string): () => void {
+    let release!: () => void;
+    this.holds.set(kind, new Promise<void>((r) => (release = r)));
+    return () => {
+      this.holds.delete(kind);
+      release();
+    };
+  }
   /** Most seat map requests that were in flight at once. */
   peakSeatMaps = 0;
   private liveSeatMaps = 0;
@@ -199,6 +212,8 @@ export class FakeDuffel implements DuffelPort {
     this.calls.push(`seatMaps:${offerId}`);
     this.peakSeatMaps = Math.max(this.peakSeatMaps, ++this.liveSeatMaps);
     try {
+      await this.holds.get("seatMaps");
+      await this.holds.get(`seatMaps:${offerId}`);
       const wait = this.delay.seatMaps(offerId);
       if (wait) await new Promise((r) => setTimeout(r, wait));
     } finally {
@@ -228,6 +243,7 @@ export class FakeDuffel implements DuffelPort {
 
   async createOrder(input: { offerId: string; passengers: OrderPassengerInput[]; serviceIds: string[]; amount: string; currency: string }) {
     this.calls.push("createOrder");
+    await this.holds.get("order");
     if (this.delay.order) await new Promise((r) => setTimeout(r, this.delay.order));
     const o = this.offers.get(input.offerId);
     if (!o) throw new DuffelApiError("not_found", "offer not found", 404);
@@ -263,6 +279,7 @@ export class FakeDuffel implements DuffelPort {
 
   async getOrder(orderId: string): Promise<OrderDetail> {
     this.calls.push(`getOrder:${orderId}`);
+    await this.holds.get("order");
     if (this.delay.order) await new Promise((r) => setTimeout(r, this.delay.order));
     const ord = this.orders.get(orderId);
     if (!ord) throw new DuffelApiError("not_found", "order not found", 404);
