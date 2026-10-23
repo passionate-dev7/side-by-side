@@ -2,7 +2,7 @@
 
 ![JetBlue seat map on the Echo Show: Dad, Mum, Mia and Leo seated together in row 12, $812 family total beside Delta's $760 fare that costs $850 together](docs/img/seat-map-jetblue.png)
 
-**218 tests pass** (`npm test`: 191 server, 27 Echo Show client). **tools/call p50 18 ms, p95 69 ms** over the 6 timed calls of one `npm run demo` run, read from the wire panel against Alexa's 500 ms budget.
+**219 tests pass** (`npm test`: 191 server, 28 Echo Show client). **tools/call p50 18 ms, p95 69 ms** over the 6 timed calls of one `npm run demo` run, read from the wire panel against Alexa's 500 ms budget.
 
 ```bash
 npm install
@@ -20,7 +20,7 @@ A parent says "find us flights to Orlando for Thanksgiving, kids next to us." Si
 |---|---|---|
 | Self-hosted MCP server, Streamable HTTP, protocol 2025-11-25 and 2025-03-26 | `server/src/app.ts`, `server/src/mcp.ts` | `server/test/mcp.test.ts` (protocol negotiation, sessions, tools/list, tools/call) |
 | MCP Apps view on the 768x480 canvas | `server/src/ui/side-by-side/`, `ui://side-by-side/seats.html` | `server/test/mcp.test.ts` (resources/read returns the 768x480 view) |
-| Agent Skill, served over MCP as prompt `side-by-side` and loaded into the client's system prompt | `skills/side-by-side/SKILL.md`, `server/src/mcp.ts`, `sim/src/mcp.ts` | `server/test/mcp.test.ts` (prompts/get), `sim/test/skill.test.ts` |
+| Agent Skill, served over MCP as prompt `side-by-side` and loaded into the client's system prompt | `skills/side-by-side/SKILL.md`, `server/src/mcp.ts`, `sim/src/mcp.ts` | `server/test/mcp.test.ts` (prompts/get), `sim/test/client-skill.test.ts` (the client connects to the server and the skill reaches the model's system prompt), `sim/test/skill.test.ts` |
 | Elicitation: details and a price confirm before any booking | `server/src/service.ts` (`bookTogether`) | `server/test/mcp.test.ts` (books over the wire with elicitation) |
 | State across sessions | `server/src/store.ts` (SQLite) | `server/test/e2e.test.ts` (a restarted server detects the airline's seat change) |
 | Amazon Bedrock as the tool-choosing model | `sim/server/llm.ts` (`openai.gpt-oss-120b` on the mantle endpoint) | `npx tsx sim/scripts/mantle-turn.ts` prints PASS |
