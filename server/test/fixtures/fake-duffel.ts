@@ -27,6 +27,8 @@ interface FakeOrder {
   pendingChanges: PendingChange[];
   confirmAfterPolls: number;
   polls: number;
+  /** The search its offer came from. */
+  search: number;
 }
 
 export interface Scenario {
@@ -100,14 +102,16 @@ export class FakeDuffel implements DuffelPort {
   readonly calls: string[] = [];
   private requestPassengerIds: string[] = [];
   private seq = 0;
+  /** Each search sells a fresh set of offers, so orders on an earlier search's offers hold no seats on this one. */
+  private search = 0;
   /** Offers whose expiry has passed. */
   readonly expired = new Set<string>();
   /** Offers whose airline publishes no seat map. */
   readonly noSeatMap = new Set<string>();
   /** Only for testing that labels follow the data's mode. The emulator is never live. */
   live = false;
-  /** When offers it sells expire. */
-  expiresAt = "2026-10-21T12:30:00Z";
+  /** When offers it sells expire. Unset, each search stamps its offers with the emulator's clock plus 30 minutes. */
+  expiresAt: string | null = null;
   /** Network time the emulator takes per call, so latency-sensitive behavior can be tested. Zero by default. */
   delay = { search: 0, order: 0, seatMaps: (_offerId: string): number => 0 };
   /** Most seat map requests that were in flight at once. */
@@ -118,13 +122,18 @@ export class FakeDuffel implements DuffelPort {
   /** Polls before an order shows a booking reference. */
   confirmAfterPolls = 1;
 
-  constructor(private readonly scenarios: Scenario[] = SCENARIOS) {}
+  constructor(
+    private readonly scenarios: Scenario[] = SCENARIOS,
+    private readonly clock: () => Date = () => NOW,
+  ) {}
 
   async searchOffers(req: SearchRequest) {
     this.calls.push("searchOffers");
     if (this.delay.search) await new Promise((r) => setTimeout(r, this.delay.search));
     this.requestPassengerIds = req.passengers.map((_, i) => `pas_${i}`);
     this.offers.clear();
+    this.search++;
+    const expiresAt = this.expiresAt ?? new Date(this.clock().getTime() + 30 * 60_000).toISOString();
     const offers: OfferSummary[] = [];
     for (const sc of this.scenarios) {
       const map = makeSeatMap({
@@ -170,7 +179,7 @@ export class FakeDuffel implements DuffelPort {
         cabinClass: req.cabin,
         fareBrand: sc.fareBrand ?? null,
         passengerIds: this.requestPassengerIds,
-        expiresAt: this.expiresAt,
+        expiresAt,
         liveMode: this.live,
       };
       this.offers.set(sc.id, { summary, map, services });
@@ -193,7 +202,7 @@ export class FakeDuffel implements DuffelPort {
     if (this.noSeatMap.has(offerId)) return [];
     // Seats bought by existing orders are gone from the live map.
     const bought = new Set<string>();
-    for (const ord of this.orders.values()) if (ord.offerId === offerId) Object.values(ord.seats).forEach((s) => s && bought.add(s));
+    for (const ord of this.orders.values()) if (ord.offerId === offerId && ord.search === this.search) Object.values(ord.seats).forEach((s) => s && bought.add(s));
     if (bought.size === 0) return [o.map];
     return [
       {
@@ -241,7 +250,7 @@ export class FakeDuffel implements DuffelPort {
       throw new DuffelApiError("payment_amount_mismatch", `payment ${input.amount} ${input.currency} does not equal order total ${expected.toFixed(2)} USD`, 422);
     }
     const id = `ord_fixture_${++this.seq}`;
-    this.orders.set(id, { id, offerId: input.offerId, seats, total: expected, pendingChanges: [], confirmAfterPolls: this.confirmAfterPolls, polls: 0 });
+    this.orders.set(id, { id, offerId: input.offerId, seats, total: expected, pendingChanges: [], confirmAfterPolls: this.confirmAfterPolls, polls: 0, search: this.search });
     return { orderId: id };
   }
 
@@ -273,7 +282,7 @@ export class FakeDuffel implements DuffelPort {
     const ord = this.orders.get(orderId)!;
     const from = ord.seats[passengerId] ?? null;
     ord.seats[passengerId] = newSeat;
-    ord.pendingChanges.push({ id: `aic_${++this.seq}`, createdAt: NOW.toISOString(), seatChanges: [{ passengerId, from, to: newSeat }], scheduleChanged: false });
+    ord.pendingChanges.push({ id: `aic_${++this.seq}`, createdAt: this.clock().toISOString(), seatChanges: [{ passengerId, from, to: newSeat }], scheduleChanged: false });
   }
 
   /** The airline assigns seats to an order that bought none (a fee-free family seating commitment): an assignment, not a change. */
@@ -285,6 +294,6 @@ export class FakeDuffel implements DuffelPort {
   /** The airline records a change but the order's seats still read the old ones until the change is accepted. */
   airlineProposesSeat(orderId: string, passengerId: string, newSeat: string) {
     const ord = this.orders.get(orderId)!;
-    ord.pendingChanges.push({ id: `aic_${++this.seq}`, createdAt: NOW.toISOString(), seatChanges: [{ passengerId, from: ord.seats[passengerId] ?? null, to: newSeat }], scheduleChanged: false });
+    ord.pendingChanges.push({ id: `aic_${++this.seq}`, createdAt: this.clock().toISOString(), seatChanges: [{ passengerId, from: ord.seats[passengerId] ?? null, to: newSeat }], scheduleChanged: false });
   }
 }
