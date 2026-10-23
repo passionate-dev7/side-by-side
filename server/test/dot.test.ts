@@ -28,7 +28,7 @@ describe("DOT family seating table (policy/dot-family-seating.json, loaded at st
   });
 
   it("an unknown carrier is null, never fee-free: not a made-up code, not Spirit (linked on the dashboard but not in its table), not empty", () => {
-    for (const code of ["ZZ", "QQ", "NK", "", "B", "B66"]) expect(dotFeeFreeAdjacent(code)).toBeNull();
+    for (const code of ["XQ", "QQ", "NK", "", "B", "B66"]) expect(dotFeeFreeAdjacent(code)).toBeNull();
     // every two letter code that is not in the file: none may come back true
     const listed = new Set(DOT_CARRIERS.map((c) => c.iata));
     const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";

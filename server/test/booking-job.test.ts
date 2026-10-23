@@ -42,7 +42,7 @@ describe("book_together answers with the booking state and finishes the order in
     expect(performance.now() - t0).toBeLessThan(70);
     expect(first).toMatchObject({ kind: "booked", status: "booking", orderId: null, bookingReference: null, strategy: "seat-services", total: 850, offerId: "off_delta" });
     expect(first.seats.every((s) => s.seat)).toBe(true);
-    expect(first.voice).toMatch(/^I am booking Delta DL101 for \$850 now/);
+    expect(first.voice).toMatch(/^I am booking Delta DL1187 for \$850 now/);
     expect(ctx.store.latestOrder("default")).toBeNull();
 
     const during = await bookTogether(ctx, { offerId: "off_delta", confirmed: false }, noAsking);

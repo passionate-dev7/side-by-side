@@ -47,7 +47,7 @@ describe("find_family_flights answers within the budget and finishes in the back
     await jobOf().done;
     const done = await findFamilyFlights(ctx, SEARCH);
     expect(done).toMatchObject({ status: "ready", evaluated: 4, checking: { done: 4, of: 4 } });
-    expect(done.offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "ZZ", "UA"]);
+    expect(done.offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "NK", "UA"]);
     expect(again.status).toBe("searching");
     expect(fake.calls.filter((c) => c === "searchOffers")).toHaveLength(1);
   });
@@ -62,7 +62,7 @@ describe("find_family_flights answers within the budget and finishes in the back
     expect(v.voice).toMatch(/^So far, JetBlue is the best way to sit together: \$812 total/);
     expect(v.voice).toMatch(/still reading seat maps, 1 of 4 done/);
     await jobOf().done;
-    expect((await findFamilyFlights(ctx, SEARCH)).offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "ZZ", "UA"]);
+    expect((await findFamilyFlights(ctx, SEARCH)).offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "NK", "UA"]);
   });
 
   it("seat map requests run in parallel under a cap", async () => {

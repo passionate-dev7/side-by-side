@@ -66,7 +66,7 @@ describe("runTurn speaks and records the stripped reply", () => {
 describe("work that outlives a call", () => {
   afterEach(() => vi.unstubAllGlobals());
   const searching = { structuredContent: { kind: "offers", status: "searching", offers: [] }, content: [{ type: "text" as const, text: "I am searching." }] };
-  const ready = { structuredContent: { kind: "offers", status: "ready", offers: [{ offerId: "off_1" }] }, content: [{ type: "text" as const, text: "Duffel Airways is best." }] };
+  const ready = { structuredContent: { kind: "offers", status: "ready", offers: [{ offerId: "off_1" }] }, content: [{ type: "text" as const, text: "Spirit is best." }] };
 
   it("a searching answer ends the turn on the tool's spoken line and never polls the model again", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ text: "", toolCalls: [{ id: "1", name: "find_family_flights", arguments: {} }] }), { status: 200, headers: { "content-type": "application/json" } }));

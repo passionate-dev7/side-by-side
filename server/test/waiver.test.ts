@@ -17,7 +17,7 @@ describe("DOT fee waiver: every dashboard condition that can be checked at booki
 
   const cases: Array<[string, Partial<WaiverInput>, string, RegExp]> = [
     ["a carrier the dashboard says does not commit", { iata: "DL", airlineName: "Delta" }, "carrier_no_commitment", /Delta does not commit/],
-    ["a carrier that is not on the dashboard", { iata: "ZZ", airlineName: "Duffel Airways" }, "carrier_not_listed", /not on the DOT family seating dashboard/],
+    ["a carrier that is not on the dashboard", { iata: "NK", airlineName: "Spirit" }, "carrier_not_listed", /not on the DOT family seating dashboard/],
     ["a party whose youngest traveler is 14", { ages: [40, 14] }, "no_young_child", /Nobody is 13 or under/],
     ["a flight with no seating that puts the child beside an adult in the selected class", { seatingExists: false }, "no_seating", /No adjacent seats are open in economy/],
     ["seats chosen by hand", { seatsChosenByHand: true }, "seats_chosen", /chosen by hand/],

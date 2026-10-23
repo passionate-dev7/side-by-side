@@ -43,6 +43,8 @@ export interface Scenario {
   fee?: (d: string) => number;
   /** The airline's name for the fare, for example "Basic". */
   fareBrand?: string;
+  /** The flight as an airline publishes it: number, local departure and arrival times (HH:MM) and block minutes. */
+  flight?: { number: string; departs: string; arrives: string; minutes: number };
   /** A second cabin of the plane, numbered after the economy rows, every seat open at no fee. */
   premium?: { rows: number; layout: number[]; cabinClass: "premium_economy" | "business" | "first" };
 }
@@ -57,6 +59,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "off_jetblue",
     airline: { name: "JetBlue", iata: "B6" },
+    flight: { number: "B61801", departs: "06:59", arrives: "09:47", minutes: 168 },
     fare: 812,
     layout: [3, 3],
     rows: 30,
@@ -67,6 +70,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "off_delta",
     airline: { name: "Delta", iata: "DL" },
+    flight: { number: "DL1187", departs: "08:15", arrives: "11:02", minutes: 167 },
     fare: 760,
     layout: [3, 3],
     rows: 30,
@@ -77,6 +81,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "off_united",
     airline: { name: "United", iata: "UA" },
+    flight: { number: "UA1062", departs: "10:40", arrives: "13:31", minutes: 171 },
     fare: 795,
     layout: [3, 3],
     rows: 30,
@@ -85,8 +90,10 @@ export const SCENARIOS: Scenario[] = [
     fee: () => 30,
   },
   {
-    id: "off_duffel_airways",
-    airline: { name: "Duffel Airways", iata: "ZZ" },
+    id: "off_spirit",
+    // Spirit has no column on the DOT family seating dashboard, so its seats are evaluated as carrier_not_listed.
+    airline: { name: "Spirit", iata: "NK" },
+    flight: { number: "NK3141", departs: "12:25", arrives: "15:13", minutes: 168 },
     fare: 1010,
     layout: [3, 3],
     rows: 30,
@@ -168,12 +175,12 @@ export class FakeDuffel implements DuffelPort {
         totalAmount: sc.fare,
         currency: "USD",
         airline: sc.airline,
-        flightNumber: `${sc.airline.iata}${100 + this.scenarios.indexOf(sc)}`,
+        flightNumber: sc.flight?.number ?? `${sc.airline.iata}${100 + this.scenarios.indexOf(sc)}`,
         origin: req.origin,
         destination: req.destination,
-        departingAt: `${req.departureDate}T09:15:00`,
-        arrivingAt: `${req.departureDate}T12:05:00`,
-        durationMinutes: 170,
+        departingAt: `${req.departureDate}T${sc.flight?.departs ?? "09:15"}:00`,
+        arrivingAt: `${req.departureDate}T${sc.flight?.arrives ?? "12:05"}:00`,
+        durationMinutes: sc.flight?.minutes ?? 170,
         sliceId: `sli_${sc.id}`,
         segmentId: `seg_${sc.id}`,
         cabinClass: req.cabin,

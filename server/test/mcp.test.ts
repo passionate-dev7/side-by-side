@@ -210,7 +210,7 @@ describe("tools through the SDK client", () => {
 
     const found = await client.callTool({ name: "find_family_flights", arguments: { origin: "jfk", destination: "MCO", departure_date: "2026-11-25" } });
     const offers = (found.structuredContent as { offers: Array<{ offerId: string; airline: { iata: string }; togetherTotal: number | null }> }).offers;
-    expect(offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "ZZ", "UA"]);
+    expect(offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "NK", "UA"]);
 
     const seats = await client.callTool({ name: "show_seats", arguments: { offer_id: "off_delta" } });
     expect((seats.structuredContent as { together: string }).together).toBe("TOGETHER");
@@ -221,8 +221,8 @@ describe("tools through the SDK client", () => {
     expect((refused.structuredContent as { code: string }).code).toBe("not_together");
     expect(asked).toEqual([]);
 
-    await client.callTool({ name: "show_seats", arguments: { offer_id: "off_duffel_airways" } });
-    const booked = await client.callTool({ name: "book_together", arguments: { offer_id: "off_duffel_airways" } });
+    await client.callTool({ name: "show_seats", arguments: { offer_id: "off_spirit" } });
+    const booked = await client.callTool({ name: "book_together", arguments: { offer_id: "off_spirit" } });
     expect(booked.isError).toBeFalsy();
     const sc = booked.structuredContent as { kind: string; bookingReference: string; total: number; testMode: boolean };
     expect(sc).toMatchObject({ kind: "booked", bookingReference: "FXT4KQ", total: 1010, testMode: true });

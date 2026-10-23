@@ -64,11 +64,11 @@ describe("find_family_flights", () => {
     expect(v.testMode).toBe(true);
     expect(v.searched).toBe(4);
     const by = Object.fromEntries(v.offers.map((o) => [o.airline.iata, o]));
-    expect(v.offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "ZZ", "UA"]);
+    expect(v.offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "NK", "UA"]);
 
     expect(by.B6).toMatchObject({ guarantee: true, seatFees: 0, togetherTotal: 812, together: "TOGETHER", deltaVsCheapestFare: 52 });
     expect(by.DL).toMatchObject({ guarantee: false, seatFees: 90, togetherTotal: 850, together: "TOGETHER", deltaVsCheapestFare: 90 });
-    expect(by.ZZ).toMatchObject({ guarantee: false, seatFees: 0, togetherTotal: 1010, airline: { dotFeeFreeAdjacent: null } });
+    expect(by.NK).toMatchObject({ guarantee: false, seatFees: 0, togetherTotal: 1010, airline: { dotFeeFreeAdjacent: null } });
     expect(by.UA).toMatchObject({ together: "NOT_TOGETHER", togetherTotal: null, deltaVsCheapestFare: null });
     expect(by.UA.airline.dotFeeFreeAdjacent).toBe(false);
     expect(v.voice).toMatch(/JetBlue/);
@@ -222,10 +222,10 @@ function onlyFlights(scenarios: Scenario[]) {
 describe("a child is never booked without an adjacent adult", () => {
   it("a plan that seats Mia and Leo only beside each other is refused and creates no order", async () => {
     await searched();
-    await showSeats(ctx, "off_duffel_airways");
-    const plan = ctx.store.getPlan("default", "off_duffel_airways")!;
+    await showSeats(ctx, "off_spirit");
+    const plan = ctx.store.getPlan("default", "off_spirit")!;
     ctx.store.savePlan("default", { ...plan, customized: true, assignments: { mia: "10B", leo: "10C", dad: "10D", mum: "10E" } });
-    const err = await bookTogether(ctx, { offerId: "off_duffel_airways", confirmed: true }, null).catch((e) => e);
+    const err = await bookTogether(ctx, { offerId: "off_spirit", confirmed: true }, null).catch((e) => e);
     expect(err).toMatchObject({ code: "not_together" });
     expect(err.message).toMatch(/Mia: Seat 10B has no adult beside it/);
     expect(err.message).toMatch(/Leo: Seat 10C has no adult beside it/);
@@ -233,16 +233,16 @@ describe("a child is never booked without an adjacent adult", () => {
     expect(fake.calls).not.toContain("createOrder");
     // control: the same cabin books once the children touch an adult
     ctx.store.savePlan("default", { ...plan, customized: true, assignments: { mia: "10B", dad: "10C", mum: "10D", leo: "10E" } });
-    await expect(bookTogether(ctx, { offerId: "off_duffel_airways", confirmed: true }, null)).resolves.toMatchObject({ kind: "booked" });
+    await expect(bookTogether(ctx, { offerId: "off_spirit", confirmed: true }, null)).resolves.toMatchObject({ kind: "booked" });
   });
 
   it("a child left without any seat in the plan is refused", async () => {
     await searched();
-    await showSeats(ctx, "off_duffel_airways");
-    const plan = ctx.store.getPlan("default", "off_duffel_airways")!;
+    await showSeats(ctx, "off_spirit");
+    const plan = ctx.store.getPlan("default", "off_spirit")!;
     const { mia: _mia, ...rest } = plan.assignments;
     ctx.store.savePlan("default", { ...plan, assignments: rest });
-    await expect(bookTogether(ctx, { offerId: "off_duffel_airways", confirmed: true }, null)).rejects.toMatchObject({ code: "not_together" });
+    await expect(bookTogether(ctx, { offerId: "off_spirit", confirmed: true }, null)).rejects.toMatchObject({ code: "not_together" });
     expect(fake.orders.size).toBe(0);
   });
 
@@ -266,7 +266,7 @@ describe("no adjacent seats on the flight", () => {
     expect(v.togetherTotal).toBeNull();
     expect(v.noAdjacent).toMatchObject({ headline: "No adjacent seats on this flight", reason: "No two open seats are side by side." });
     expect(v.noAdjacent!.alternatives.map((a) => [a.airline.iata, a.familyTotal])).toEqual([["B6", 812], ["DL", 850]]);
-    expect(v.voice).toBe("There are no adjacent seats on United UA102 for Mia and Leo to sit beside an adult. JetBlue seats everyone together for $812.");
+    expect(v.voice).toBe("There are no adjacent seats on United UA1062 for Mia and Leo to sit beside an adult. JetBlue seats everyone together for $812.");
   });
 
   it("with no other flight that works, it says that instead of inventing an alternative", async () => {
@@ -274,7 +274,7 @@ describe("no adjacent seats on the flight", () => {
     await findFamilyFlights(ctx, SEARCH);
     const v = await showSeats(ctx, "off_united");
     expect(v.noAdjacent!.alternatives).toEqual([]);
-    expect(v.voice).toMatch(/no adjacent seats on United UA100/);
+    expect(v.voice).toMatch(/no adjacent seats on United UA1062/);
     expect(v.voice).toMatch(/No other flight in this search seats your family together\.$/);
   });
 
@@ -287,7 +287,7 @@ describe("no adjacent seats on the flight", () => {
     await searched();
     const err = await bookTogether(ctx, { offerId: "off_united", confirmed: true }, null).catch((e) => e);
     expect(err).toMatchObject({ code: "no_adjacent_seats" });
-    expect(err.voice).toMatch(/^I did not book\. There are no adjacent seats on United UA102/);
+    expect(err.voice).toMatch(/^I did not book\. There are no adjacent seats on United UA1062/);
     expect(fake.orders.size).toBe(0);
   });
 });
@@ -299,7 +299,7 @@ describe("a DOT-listed carrier does not get $0 seats unless the dashboard's cond
   it("ranking states the waiver per carrier: JetBlue applies, Delta has no commitment, an unlisted carrier is not assumed", async () => {
     const v = await searched();
     const by = Object.fromEntries(v.offers.map((o) => [o.airline.iata, o.waiver.code]));
-    expect(by).toEqual({ B6: "applies", DL: "carrier_no_commitment", ZZ: "carrier_not_listed", UA: "carrier_no_commitment" });
+    expect(by).toEqual({ B6: "applies", DL: "carrier_no_commitment", NK: "carrier_not_listed", UA: "carrier_no_commitment" });
   });
 
   it("no traveler 13 or under: JetBlue's seats are not waived and are paid for, even though the carrier is listed", async () => {
@@ -416,8 +416,8 @@ describe("show_seats and move_traveler", () => {
 
   it("moving a child away from every adult flips the verdict to NOT_TOGETHER and names the child", async () => {
     await searched();
-    await showSeats(ctx, "off_duffel_airways");
-    const v = await moveTraveler(ctx, { offerId: "off_duffel_airways", traveler: "Mia", seat: "30F" });
+    await showSeats(ctx, "off_spirit");
+    const v = await moveTraveler(ctx, { offerId: "off_spirit", traveler: "Mia", seat: "30F" });
     expect(v.together).toBe("NOT_TOGETHER");
     expect(v.violations.map((x) => x.travelerId)).toContain("mia");
     expect(v.togetherTotal).toBeNull();
@@ -425,19 +425,19 @@ describe("show_seats and move_traveler", () => {
 
   it("moves a parent to the aisle by position and keeps the children beside an adult", async () => {
     await searched();
-    await showSeats(ctx, "off_duffel_airways");
-    const v = await moveTraveler(ctx, { offerId: "off_duffel_airways", traveler: "Dad", position: "aisle" });
+    await showSeats(ctx, "off_spirit");
+    const v = await moveTraveler(ctx, { offerId: "off_spirit", traveler: "Dad", position: "aisle" });
     expect(v.together).toBe("TOGETHER");
     const dad = v.assignments.find((a) => a.travelerId === "dad")!.seat;
-    expect(buildGrid(fake.offers.get("off_duffel_airways")!.map).seats.get(dad)!.aisle).toBe(true);
+    expect(buildGrid(fake.offers.get("off_spirit")!.map).seats.get(dad)!.aisle).toBe(true);
   });
 
   it("swaps with whoever holds the target seat instead of double-booking it", async () => {
     await searched();
-    const before = await showSeats(ctx, "off_duffel_airways");
+    const before = await showSeats(ctx, "off_spirit");
     const miaSeat = before.assignments.find((a) => a.travelerId === "mia")!.seat;
     const dadSeat = before.assignments.find((a) => a.travelerId === "dad")!.seat;
-    const after = await moveTraveler(ctx, { offerId: "off_duffel_airways", traveler: "Dad", seat: miaSeat });
+    const after = await moveTraveler(ctx, { offerId: "off_spirit", traveler: "Dad", seat: miaSeat });
     expect(after.assignments.find((a) => a.travelerId === "dad")!.seat).toBe(miaSeat);
     expect(after.assignments.find((a) => a.travelerId === "mia")!.seat).toBe(dadSeat);
     expect(new Set(after.assignments.map((a) => a.seat)).size).toBe(after.assignments.length);
@@ -494,9 +494,9 @@ describe("book_together", () => {
 
   it("refuses to book when the family would not sit together, and creates no order", async () => {
     await searched();
-    await showSeats(ctx, "off_duffel_airways");
-    await moveTraveler(ctx, { offerId: "off_duffel_airways", traveler: "Mia", seat: "30F" });
-    await expect(bookTogether(ctx, { offerId: "off_duffel_airways", confirmed: true }, null)).rejects.toMatchObject({ code: "not_together" });
+    await showSeats(ctx, "off_spirit");
+    await moveTraveler(ctx, { offerId: "off_spirit", traveler: "Mia", seat: "30F" });
+    await expect(bookTogether(ctx, { offerId: "off_spirit", confirmed: true }, null)).rejects.toMatchObject({ code: "not_together" });
     expect(fake.orders.size).toBe(0);
     expect(fake.calls).not.toContain("createOrder");
   });
@@ -508,9 +508,9 @@ describe("book_together", () => {
 
   it("refuses when a planned seat was sold after the search, using the live seat map", async () => {
     await searched();
-    const shown = await showSeats(ctx, "off_duffel_airways");
-    sellSeat("off_duffel_airways", shown.assignments[0].seat);
-    await expect(bookTogether(ctx, { offerId: "off_duffel_airways", confirmed: true }, null)).rejects.toMatchObject({ code: "not_together" });
+    const shown = await showSeats(ctx, "off_spirit");
+    sellSeat("off_spirit", shown.assignments[0].seat);
+    await expect(bookTogether(ctx, { offerId: "off_spirit", confirmed: true }, null)).rejects.toMatchObject({ code: "not_together" });
     expect(fake.orders.size).toBe(0);
   });
 
@@ -520,7 +520,7 @@ describe("book_together", () => {
     sellSeat("off_delta", shown.assignments[0].seat);
     const err = await bookTogether(ctx, { offerId: "off_delta", confirmed: true }, null).catch((e) => e);
     expect(err).toMatchObject({ code: "no_adjacent_seats" });
-    expect(err.voice).toMatch(/no adjacent seats on Delta DL101 for Mia and Leo/);
+    expect(err.voice).toMatch(/no adjacent seats on Delta DL1187 for Mia and Leo/);
     expect(err.voice).toMatch(/JetBlue seats everyone together for \$812/);
     expect(fake.orders.size).toBe(0);
     expect(fake.calls).not.toContain("createOrder");

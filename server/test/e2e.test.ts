@@ -76,8 +76,10 @@ describe("family journey, end to end over MCP", () => {
     });
     const found = await call<OffersView>(c, "find_family_flights", { origin: "JFK", destination: "MCO", departure_date: "2026-11-25" });
     ranked = found.view;
-    expect(ranked.offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "ZZ", "UA"]);
+    expect(ranked.offers.map((o) => o.airline.iata)).toEqual(["B6", "DL", "NK", "UA"]);
     expect([ranked.evaluated, ranked.searched]).toEqual([4, 4]);
+    expect(new Set(ranked.offers.map((o) => o.departingAt)).size).toBe(4);
+    expect(ranked.offers.map((o) => o.togetherTotal)).toEqual([812, 850, 1010, null]);
     const priced = ranked.offers.filter((o) => o.togetherTotal !== null);
     expect(priced.length).toBe(3);
     expect(priced.map((o) => o.togetherTotal)).toEqual([...priced.map((o) => o.togetherTotal!)].sort((a, b) => a - b));
