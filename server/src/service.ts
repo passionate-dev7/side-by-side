@@ -17,6 +17,7 @@ import type {
   SeatChange,
   Provenance,
   SeatMapView,
+  StatusCabin,
   StatusView,
   Traveler,
   TogetherStatus,
@@ -982,6 +983,20 @@ async function proposeReseat(ctx: Ctx, stored: BookedOrder, current: Record<stri
   return { status: "proposal", moves, fee, currency, guaranteeApplies: dotFeeFreeAdjacent(stored.airline.iata) === true };
 }
 
+/** The rows of the booked cabin that hold the family now, each flagged traveler's former seat and any proposed seat. */
+function statusCabin(grid: Grid, stored: BookedOrder, current: Record<string, string | null>, affected: AffectedTraveler[], reseat: Reseat | null): StatusCabin | undefined {
+  const idOf = new Map(stored.members.map((m) => [m.name, m.id]));
+  const occupant = new Map(stored.members.filter((m) => current[m.id]).map((m) => [current[m.id]!, m.id]));
+  const former = affected.filter((a) => a.from && a.from !== a.seat).map((a) => ({ travelerId: idOf.get(a.name)!, seat: a.from! }));
+  const proposed = reseat?.status === "proposal" ? reseat.moves.map((m) => m.to) : [];
+  const window = [...occupant.keys(), ...former.map((f) => f.seat), ...proposed].filter((d) => grid.seats.has(d));
+  if (!window.length) return undefined;
+  const distinct = new Set(window.map((d) => grid.seats.get(d)!.row)).size;
+  // Two rows of context around a short window, never fewer rows than the window needs.
+  const rows = viewRows(grid, occupant, window, Math.max(distinct, Math.min(distinct + 2, 5)));
+  return { rows, travelers: stored.members.map(toTraveler), former, proposed };
+}
+
 /** One live reading of a booked order against the seats it was booked with. Slow: it asks the airline. */
 async function liveStatus(ctx: Ctx, stored: BookedOrder): Promise<StatusView> {
   const duffel = duffelOrThrow(ctx);
@@ -1028,6 +1043,7 @@ async function liveStatus(ctx: Ctx, stored: BookedOrder): Promise<StatusView> {
   }
 
   const reseat = !together && unassigned.length === 0 && affected.length ? await proposeReseat(ctx, stored, current, detail.currency) : null;
+  const cabin = statusCabin(grid, stored, current, affected, reseat);
   const airlineChanges = { open: detail.pendingChanges.length, scheduleChanged: detail.pendingChanges.some((c) => c.scheduleChanged) };
 
   let voice: string;
@@ -1063,6 +1079,7 @@ async function liveStatus(ctx: Ctx, stored: BookedOrder): Promise<StatusView> {
     changes,
     affected,
     reseat,
+    cabin,
     airlineChanges,
     checkedAt: ctx.now().toISOString(),
     refreshing: false,

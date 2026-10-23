@@ -246,6 +246,16 @@ export type Reseat =
   | { status: "proposal"; moves: Array<{ name: string; from: string | null; to: string; fee: number }>; fee: number; currency: string; guaranteeApplies: boolean }
   | { status: "unavailable"; reason: string };
 
+/** The booked cabin around the family, read-only: where everyone sits now, where a flagged traveler sat, and any proposed seats. */
+export interface StatusCabin {
+  rows: SeatRow[];
+  travelers: Traveler[];
+  /** Each flagged traveler's seat when booked. */
+  former: Array<{ travelerId: string; seat: string }>;
+  /** Seats of the reseat proposal. */
+  proposed: string[];
+}
+
 export interface StatusView {
   kind: "together-status";
   orderId: string;
@@ -256,6 +266,7 @@ export interface StatusView {
   changes: SeatChange[];
   affected: AffectedTraveler[];
   reseat: Reseat | null;
+  cabin?: StatusCabin;
   /** Airline-initiated changes still waiting for the traveler's answer. */
   airlineChanges: { open: number; scheduleChanged: boolean };
   checkedAt: string;

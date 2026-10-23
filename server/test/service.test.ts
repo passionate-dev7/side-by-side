@@ -639,6 +639,31 @@ describe("still_together (a new session, state read from the store)", () => {
     expect(s.voice).toMatch(/Delta sent a change to your booking and is waiting for your response\./);
   });
 
+  it("the status carries the cabin: the family's row, the child's new seat and her former seat, marked", async () => {
+    const { booked, seat, pid } = await bookedDelta();
+    fake.airlineMovesSeat(booked.orderId!, pid("mia"), "30F");
+    const s = await stillTogether(ctx);
+    const rows = s.cabin!.rows.map((r) => r.row);
+    const rowOf = (d: string) => parseInt(d, 10);
+    expect(rows).toEqual(expect.arrayContaining([30, rowOf(seat("Dad")), rowOf(seat("Mum")), rowOf(seat("Mia"))]));
+    const at = (d: string) => s.cabin!.rows.flatMap((r) => r.cells).find((c) => c.kind === "seat" && c.designator === d);
+    expect(at("30F")).toMatchObject({ travelerId: "mia" });
+    expect(s.cabin!.former).toEqual([{ travelerId: "mia", seat: seat("Mia") }]);
+    expect(s.cabin!.proposed).toEqual(s.reseat?.status === "proposal" ? s.reseat.moves.map((m) => m.to) : []);
+  });
+
+  it("a former seat whose row no one sits in any more is still drawn, so the move reads from where she was", async () => {
+    const { booked, seat, pid } = await bookedDelta();
+    const partner = ["Dad", "Mum"].find((n) => parseInt(seat(n), 10) === parseInt(seat("Mia"), 10))!;
+    fake.airlineMovesSeat(booked.orderId!, pid("mia"), "30F");
+    fake.airlineMovesSeat(booked.orderId!, pid(partner.toLowerCase()), "5C");
+    fake.noSeatMap.add("off_delta");
+    const s = await stillTogether(ctx);
+    expect(s.cabin!.proposed).toEqual([]);
+    expect(s.cabin!.rows.map((r) => r.row)).toContain(parseInt(seat("Mia"), 10));
+    expect(s.cabin!.rows.flatMap((r) => r.cells).some((c) => c.kind === "seat" && c.designator === seat("Mia"))).toBe(true);
+  });
+
   it("control: the airline swaps two parents and the children still have an adult beside them, so nothing is flagged", async () => {
     const { booked, seat, pid } = await bookedDelta();
     fake.airlineMovesSeat(booked.orderId!, pid("dad"), seat("Mum"));

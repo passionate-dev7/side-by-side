@@ -228,6 +228,16 @@ button:disabled { cursor: not-allowed; }
 .flag-seat { font-size: var(--fs-lead); }
 .flag-seat b { font-weight: 600; color: var(--warn); }
 .ref-line b { color: var(--ink); letter-spacing: 0.06em; font-weight: 600; }
+.status-map { display: grid; grid-template-columns: 436px minmax(0, 1fr); gap: var(--sp-7); min-height: 0; }
+.status-map .side { display: grid; align-content: center; gap: var(--sp-4); min-width: 0; }
+.status-map .ref { font-size: var(--fs-title); }
+.who.compact li { font-size: var(--fs-label); padding: var(--sp-2) 0; }
+.who.compact .change { font-size: var(--fs-note); }
+.cabin.read-only .trav { cursor: default; touch-action: auto; }
+.seat.is-former { border: 2px dashed var(--rule); }
+.trav.is-ghost { background: transparent; color: var(--muted); border: 2px dashed var(--muted); }
+.seat.is-proposed { outline: 3px solid var(--ok); outline-offset: 2px; }
+.cabin.read-only .trav.is-flagged::after { top: -12px; right: -12px; width: 22px; height: 22px; font-size: 16px; }
 .note { font-size: var(--fs-body); color: var(--muted); }
 .big { font-size: var(--fs-lead); line-height: 1.2; overflow-wrap: anywhere; }
 .code { font-size: var(--fs-label); color: var(--muted); letter-spacing: 0.04em; }

@@ -1,6 +1,6 @@
-import type { BookedView, ErrorView, FamilyView, OfferCard, OffersView, StatusView } from "../../domain.js";
+import type { BookedView, Cell, ErrorView, FamilyView, OfferCard, OffersView, StatusCabin, StatusView } from "../../domain.js";
 import { h, type Child } from "./dom.js";
-import { checkedAt, clock, day, money, partyLine, stops } from "./format.js";
+import { checkedAt, clock, day, money, partyLine, seatLetter, stops } from "./format.js";
 import { breakdown, checkedLabel, rankNote } from "./audit.js";
 import { sourceLine } from "./provenance.js";
 
@@ -101,6 +101,34 @@ function reseatLine(v: StatusView): string {
   return r.guaranteeApplies ? `Proposed: ${moves}. ${who} commits to this at no fee. Ask them to make the change.` : `Proposed: ${moves}${r.fee > 0 ? `, ${money(r.fee, r.currency)} in seat fees` : ", no seat fee"}. Ask ${who} to make the change.`;
 }
 
+/** The booked cabin, read-only: chips where the family sits now, a dashed ghost where a flagged traveler sat, proposed seats outlined. */
+function statusCabin(c: StatusCabin, flagged: Set<string>): HTMLElement {
+  const byId = new Map(c.travelers.map((t) => [t.id, t]));
+  const ghost = new Map(c.former.map((f) => [f.seat, byId.get(f.travelerId)]));
+  const proposed = new Set(c.proposed);
+  const tight = c.rows.some((r) => r.cells.filter((x) => x.kind === "seat").length >= 8);
+  const cell = (x: Cell): HTMLElement => {
+    if (x.kind !== "seat") return h("span", { class: x.kind, "aria-hidden": "true" });
+    const t = x.travelerId ? byId.get(x.travelerId) : undefined;
+    const was = ghost.get(x.designator);
+    const cls = `seat${t ? " is-mine" : was ? " is-former" : " is-taken"}${proposed.has(x.designator) ? " is-proposed" : ""}`;
+    const label = t ? `${t.name}, seat ${x.designator}${flagged.has(t.name) ? ", needs an adult beside them" : ""}` : was ? `Seat ${x.designator}, where ${was.name} sat` : `Seat ${x.designator}`;
+    const chipOf = (who: NonNullable<typeof t>, extra: string) =>
+      h("span", { class: `trav ${who.role === "child" ? "is-child" : "is-adult"}${who.name.length >= 7 ? " is-xlong" : who.name.length >= 4 ? " is-long" : ""}${extra}` }, h("span", { class: "nm" }, who.name));
+    return h("div", { class: cls, "data-seat": x.designator, "aria-label": `${label}${proposed.has(x.designator) ? ", proposed" : ""}` }, t ? chipOf(t, flagged.has(t.name) ? " is-flagged" : "") : was ? chipOf(was, " is-ghost") : h("span", {}, seatLetter(x.designator)));
+  };
+  return h(
+    "section",
+    { class: `cabin${tight ? " tight" : ""} read-only`, "aria-label": "Your seats on the booked flight" },
+    ...c.rows.flatMap((r, i) => {
+      const prev = c.rows[i - 1];
+      const gap = prev && r.row - prev.row > 1 ? [h("div", { class: "skip", role: "separator", "aria-label": `rows ${prev.row + 1} to ${r.row - 1} not shown` }, h("span", {}, prev.row + 1 === r.row - 1 ? `row ${prev.row + 1}` : `rows ${prev.row + 1} to ${r.row - 1}`))] : [];
+      const cols = r.cells.map((x) => (x.kind === "aisle" ? (tight ? "10px" : "16px") : "minmax(0, 1fr)")).join(" ");
+      return [...gap, h("div", { class: "row", style: `--cols: ${cols}` }, h("span", { class: "rownum" }, String(r.row)), ...r.cells.map(cell))];
+    }),
+  );
+}
+
 export function statusScreen(v: StatusView): HTMLElement {
   const bad = new Set(v.affected.map((a) => a.name));
   const moved = new Map(v.changes.map((c) => [c.name, c]));
@@ -114,19 +142,26 @@ export function statusScreen(v: StatusView): HTMLElement {
       c ? h("span", { class: "change" }, c.from ?? "No seat", " to ", h("b", {}, c.to ?? "none")) : s.seat ? h("span", { class: "seatno" }, s.seat) : h("span", { class: "seatno none" }, "No seat yet"),
     );
   });
+  const list = h("ul", { class: `who${v.cabin ? " compact" : ""}`, "aria-label": v.changes.length ? "Seats, with changes" : "Seats by traveler" }, ...rows);
+  const ref = v.affected.length
+    ? h("div", { class: "label ref-line" }, `${v.airline.name} · booking `, h("b", {}, v.bookingReference))
+    : h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), v.cabin ? null : h("div", { class: "flight" }, v.changes.length ? "Seat changes since you booked" : "No seat changes since you booked"));
   const left = v.affected.length
     ? h(
         "div",
         { class: "stack" },
         h("div", { class: "label" }, "Needs an adult beside them"),
         ...v.affected.map((a) => h("div", { class: "flag-row" }, h("span", { class: "trav is-child is-flagged" }, h("span", { class: "nm" }, a.name)), h("span", { class: "flag-seat" }, a.from ?? "No seat", " to ", h("b", {}, a.seat ?? "none")))),
-        h("div", { class: "label ref-line" }, `${v.airline.name} · booking `, h("b", {}, v.bookingReference)),
+        ref,
       )
-    : h("div", { class: "stack" }, h("div", { class: "label" }, "Booking reference"), h("div", { class: "ref" }, v.bookingReference), h("div", { class: "flight" }, v.changes.length ? "Seat changes since you booked" : "No seat changes since you booked"));
+    : ref;
+  const body = v.cabin
+    ? h("section", { class: "status-map" }, statusCabin(v.cabin, bad), h("div", { class: "side" }, v.affected.length ? ref : left, list))
+    : h("section", { class: "split" }, left, list);
   return screen(
     "together-status",
     head(statusTitle(v), [v.together ? chip("ok", "Together", true) : awaitingSeats(v) ? chip("accent", "Seats pending", true) : chip("warn", "Not together", true)]),
-    h("section", { class: "split" }, left, h("ul", { class: "who", "aria-label": v.changes.length ? "Seats, with changes" : "Seats by traveler" }, ...rows)),
+    body,
     h("footer", { class: "foot-prov" }, h("p", { class: "evaluated" }, ...(reseatLine(v).startsWith("Proposed: ") ? [h("b", {}, "Proposed"), reseatLine(v).slice("Proposed".length)] : [reseatLine(v)])), sourceLine(v.provenance)),
   );
 }
